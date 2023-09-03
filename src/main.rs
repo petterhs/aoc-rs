@@ -42,6 +42,12 @@ enum RockPaperScissors {
     Scissors,
 }
 
+enum Result {
+    Win,
+    Lose,
+    Draw,
+}
+
 impl RockPaperScissors {
     fn beats(&self, other: &RockPaperScissors) -> bool {
         match self {
@@ -75,6 +81,26 @@ impl RockPaperScissors {
     fn self_score(self) -> u32 {
         self.into()
     }
+
+    fn from_strategy(opponent: &RockPaperScissors, wanted_result: &Result) -> RockPaperScissors {
+        match wanted_result {
+            Result::Win => match opponent {
+                RockPaperScissors::Rock => RockPaperScissors::Paper,
+                RockPaperScissors::Paper => RockPaperScissors::Scissors,
+                RockPaperScissors::Scissors => RockPaperScissors::Rock,
+            },
+            Result::Lose => match opponent {
+                RockPaperScissors::Rock => RockPaperScissors::Scissors,
+                RockPaperScissors::Paper => RockPaperScissors::Rock,
+                RockPaperScissors::Scissors => RockPaperScissors::Paper,
+            },
+            Result::Draw => match opponent {
+                RockPaperScissors::Rock => RockPaperScissors::Rock,
+                RockPaperScissors::Paper => RockPaperScissors::Paper,
+                RockPaperScissors::Scissors => RockPaperScissors::Scissors,
+            },
+        }
+    }
 }
 
 impl Into<u32> for RockPaperScissors {
@@ -90,9 +116,20 @@ impl Into<u32> for RockPaperScissors {
 impl Into<RockPaperScissors> for char {
     fn into(self) -> RockPaperScissors {
         match self {
-            'A' | 'X' => RockPaperScissors::Rock,
-            'B' | 'Y' => RockPaperScissors::Paper,
-            'C' | 'Z' => RockPaperScissors::Scissors,
+            'A' => RockPaperScissors::Rock,
+            'B' => RockPaperScissors::Paper,
+            'C' => RockPaperScissors::Scissors,
+            _ => panic!("Invalid input"),
+        }
+    }
+}
+
+impl Into<Result> for char {
+    fn into(self) -> Result {
+        match self {
+            'X' => Result::Lose,
+            'Y' => Result::Draw,
+            'Z' => Result::Win,
             _ => panic!("Invalid input"),
         }
     }
@@ -105,6 +142,7 @@ fn day2() {
 
     let mut total_score = 0;
     let mut opponent: RockPaperScissors;
+    let mut wanted_result: Result;
     let mut me: RockPaperScissors;
     for line in lines {
         if line.len() == 0 {
@@ -114,7 +152,9 @@ fn day2() {
         let chars: Vec<char> = line.chars().collect();
         println!("Chars: {:?}", chars);
         opponent = chars[0].into();
-        me = chars[2].into();
+        wanted_result = chars[2].into();
+
+        me = RockPaperScissors::from_strategy(&opponent, &wanted_result);
         println!("Opponent: {:?}, Me: {:?}", opponent, me);
 
         let score = me.score(&opponent);
