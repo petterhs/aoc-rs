@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "aoc23"
+name = "aoc22"
 version = "0.1.0"
