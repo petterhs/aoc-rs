@@ -1,9 +1,15 @@
 use std::str::Lines;
 
-fn do_move(stacks: &mut Vec<Vec<char>>, from: usize, to: usize) {
-    let c = stacks[from - 1].pop().unwrap();
-    println!("Move {} from {} to {}", c, from, to);
-    stacks[to - 1].push(c);
+fn do_move(stacks: &mut Vec<Vec<char>>, num: usize, from: usize, to: usize) {
+    let mut temp: Vec<char> = Vec::new();
+
+    for _ in 0..num {
+        temp.push(stacks[from - 1].pop().unwrap());
+    }
+    println!("Temp: {:?}", temp);
+    for _ in 0..num {
+        stacks[to - 1].push(temp.pop().unwrap());
+    }
 }
 
 fn parse_stack(lines: Lines) -> Vec<Vec<char>> {
@@ -53,16 +59,41 @@ fn part1() {
         .for_each(|s| {
             let mut words = s.split_whitespace();
             let _ = words.next();
-            let num = words.next();
+            let num = words.next().unwrap().parse::<usize>().unwrap();
             let _ = words.next();
             let from = words.next().unwrap().parse::<usize>().unwrap();
             let _ = words.next();
             let to = words.next().unwrap().parse::<usize>().unwrap();
 
-            println!("Move {} from {} to {}", num.unwrap(), from, to);
-            for _ in 0..num.unwrap().parse::<usize>().unwrap() {
-                do_move(&mut stacks, from, to);
+            println!("Move {} from {} to {}", num, from, to);
+            for _ in 0..num {
+                do_move(&mut stacks, 1, from, to);
             }
+        });
+
+    print!("Code: ");
+    stacks.iter().for_each(|s| {
+        print!("{}", s.last().unwrap());
+    });
+    println!();
+}
+
+fn part2() {
+    let mut stacks = parse_stack(include_str!("../input/5").lines());
+    let _sum = include_str!("../input/5")
+        .lines()
+        .filter(|s| s.starts_with("move"))
+        .for_each(|s| {
+            let mut words = s.split_whitespace();
+            let _ = words.next();
+            let num = words.next().unwrap().parse::<usize>().unwrap();
+            let _ = words.next();
+            let from = words.next().unwrap().parse::<usize>().unwrap();
+            let _ = words.next();
+            let to = words.next().unwrap().parse::<usize>().unwrap();
+
+            println!("Move {} from {} to {}", num, from, to);
+            do_move(&mut stacks, num as usize, from, to);
         });
 
     print!("Code: ");
@@ -75,4 +106,5 @@ fn part1() {
 pub fn run() {
     println!("Day 5");
     part1();
+    part2();
 }
