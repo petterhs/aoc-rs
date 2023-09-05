@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -131,7 +131,7 @@ where
 }
 
 fn parse_input(input: &str) -> Dir {
-    let mut root = Dir::new(
+    let root = Dir::new(
         "/".to_string(),
         Rc::new(RefCell::new(Dir {
             name: "/".to_string(),
@@ -230,9 +230,9 @@ fn part1() {
     //visit all dirs
     let mut capped_size = 0;
 
-    let test = Rc::new(RefCell::new(dirs));
+    let dirs = Rc::new(RefCell::new(dirs));
 
-    breadth_first_map(test, |c: Link| {
+    breadth_first_map(dirs, |c: Link| {
         let size = c.borrow().get_size();
 
         if size <= 100000 {
@@ -244,8 +244,52 @@ fn part1() {
     println!("Capped size: {}", capped_size);
 }
 
+fn part2() {
+    println!("Day 7 part 2");
+
+    //get input from file
+    let input = include_str!("../input/7");
+
+    let dirs = parse_input(input);
+    let root_size = dirs.get_size();
+
+    let filesystem_size = 70000000;
+    let space_left = filesystem_size - root_size;
+    let needed_space = 30000000;
+    let min_space_to_free = needed_space - space_left;
+
+    println!("Filesystem size: {}", filesystem_size);
+    println!("Root size: {}", root_size);
+    println!("Space left: {}", space_left);
+    println!("Needed space: {}", needed_space);
+    println!("");
+    println!("Min space to free: {}", min_space_to_free);
+
+    let mut dir_to_delete: Option<(String, u64)> = None;
+    let dirs = Rc::new(RefCell::new(dirs));
+    breadth_first_map(dirs, |c: Link| {
+        let size = c.borrow().get_size();
+
+        if size >= min_space_to_free {
+            let name = c.borrow().get_name().to_string();
+            println!("Big enough dir: {:?} size: {}", name, size);
+
+            if dir_to_delete.is_none() || size < dir_to_delete.clone().unwrap().1 {
+                dir_to_delete = Some((name, size));
+            }
+        }
+    });
+
+    if let Some((name, size)) = dir_to_delete {
+        println!("Dir to delete: {:?} size: {}", name, size);
+    } else {
+        println!("No dir to delete");
+    }
+}
+
 pub fn run() {
     part1();
+    part2();
 }
 
 #[cfg(test)]
