@@ -1,5 +1,3 @@
-use std::array;
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Priority(u32);
 
