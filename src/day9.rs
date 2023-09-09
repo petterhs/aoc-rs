@@ -303,9 +303,11 @@ impl RopeSegment {
                     }
                     Direction::DownLeft => {
                         self.head_relative = Direction::Down;
+                        tail_move = Move::new(Direction::Down, 1);
                     }
                     Direction::UpRight => {
                         self.head_relative = Direction::Right;
+                        tail_move = Move::new(Direction::Right, 1);
                     }
                     _ => {
                         println!("Invalid move from DownRight, {:?}", m.direction);
@@ -370,7 +372,7 @@ fn part2() {
 
     for m in moves {
         let mut next_segment_move = m;
-        rope.iter_mut().enumerate().for_each(|(i, r)| {
+        rope.iter_mut().for_each(|r| {
             if next_segment_move.direction != Direction::On {
                 next_segment_move = r.move_segment(&next_segment_move);
             }
@@ -581,6 +583,93 @@ mod tests {
 
         let visited_tail_nodes = rope[8].tail_visited.iter().count();
         assert_eq!(visited_tail_nodes, 36);
-        assert!(false);
+    }
+
+    #[test]
+    fn test_move_rope3() {
+        let mut rope = [
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+            RopeSegment::new(),
+        ];
+
+        let input = include_str!("../input/test9_3");
+        let moves = parse_input(input);
+
+        for m in moves {
+            // Create a 30x30 grid for visualizing positions from -15 to -15
+            let mut grid = [[0; 30]; 30];
+            let mut next_segment_move = m;
+
+            println!("\n\nHead Move: {:?}", &next_segment_move.direction);
+
+            rope.iter_mut().enumerate().for_each(|(i, r)| {
+                if next_segment_move.direction == Direction::On {
+                    grid[(r.tail.0 .0 + 15) as usize][(r.tail.0 .1 + 15) as usize] = i + 1;
+                } else {
+                    println!(
+                        "Segment: {} Previous tail moved: {:?}",
+                        i, &next_segment_move.direction
+                    );
+                    next_segment_move = r.move_segment(&next_segment_move);
+                    println!("Segment: {} New tail: {:?}", i, r.tail);
+                    println!("X: {}, Y: {}", r.tail.0 .0, r.tail.0 .1);
+                    grid[(r.tail.0 .0 + 15) as usize][(r.tail.0 .1 + 15) as usize] = i + 1;
+                }
+            });
+
+            grid[15][15] = 10;
+
+            for i in (0..30).rev() {
+                for j in 0..30 {
+                    if grid[j][i] == 0 {
+                        if i == 0 {
+                            print!("-");
+                            continue;
+                        }
+                        if j == 0 {
+                            print!("|");
+                            continue;
+                        }
+                        print!(".");
+                    } else if grid[j][i] == 10 {
+                        print!("s");
+                    } else {
+                        print!("{}", grid[j][i]);
+                    }
+                }
+                println!();
+            }
+        }
+
+        for r in rope.iter() {
+            println!("Rope: {:?}", r.tail);
+        }
+
+        let mut grid = [[0; 30]; 30];
+
+        rope[8].tail_visited.iter().for_each(|p| {
+            grid[(p.0 .0 + 15) as usize][(p.0 .1 + 15) as usize] = 1;
+        });
+
+        for i in (0..30).rev() {
+            for j in 0..30 {
+                if grid[j][i] == 0 {
+                    print!(".");
+                } else {
+                    print!("#");
+                }
+            }
+            println!();
+        }
+
+        let visited_tail_nodes = rope[8].tail_visited.iter().count();
+        assert_eq!(visited_tail_nodes, 8);
     }
 }
