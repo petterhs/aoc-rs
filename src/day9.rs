@@ -27,6 +27,40 @@ impl Direction {
             Direction::DownRight => Direction::UpLeft,
         }
     }
+
+    fn to_vec(&self) -> (i32, i32) {
+        match self {
+            Direction::UpLeft => (-1, 1),
+            Direction::Up => (0, 1),
+            Direction::UpRight => (1, 1),
+            Direction::Left => (-1, 0),
+            Direction::On => (0, 0),
+            Direction::Right => (1, 0),
+            Direction::DownLeft => (-1, -1),
+            Direction::Down => (0, -1),
+            Direction::DownRight => (1, -1),
+        }
+    }
+    fn from_vec(vec: (i32, i32)) -> Option<Self> {
+        match vec {
+            (-1, 1) => Some(Direction::UpLeft),
+            (0, 1) => Some(Direction::Up),
+            (1, 1) => Some(Direction::UpRight),
+            (-1, 0) => Some(Direction::Left),
+            (0, 0) => Some(Direction::On),
+            (1, 0) => Some(Direction::Right),
+            (-1, -1) => Some(Direction::DownLeft),
+            (0, -1) => Some(Direction::Down),
+            (1, -1) => Some(Direction::DownRight),
+            _ => None,
+        }
+    }
+    fn plus(&self, other_dir: &Direction) -> Option<Direction> {
+        let (x1, y1) = self.to_vec();
+        let (x2, y2) = other_dir.to_vec();
+        let (x, y) = (x1 + x2, y1 + y2);
+        Direction::from_vec((x, y))
+    }
 }
 
 impl From<&str> for Direction {
@@ -44,12 +78,11 @@ impl From<&str> for Direction {
 #[derive(Debug, PartialEq)]
 struct Move {
     direction: Direction,
-    steps: i32,
 }
 
 impl Move {
-    fn new(direction: Direction, steps: i32) -> Self {
-        Move { direction, steps }
+    fn new(direction: Direction) -> Self {
+        Move { direction }
     }
 }
 #[derive(Debug, PartialEq, Eq, Hash, Default, Copy, Clone)]
@@ -57,29 +90,10 @@ struct Pos((i32, i32));
 
 impl Pos {
     fn move_pos(&mut self, m: &Move) {
-        match m.direction {
-            Direction::Up => self.0 .1 += m.steps,
-            Direction::Down => self.0 .1 -= m.steps,
-            Direction::Left => self.0 .0 -= m.steps,
-            Direction::Right => self.0 .0 += m.steps,
-            Direction::UpRight => {
-                self.0 .0 += m.steps;
-                self.0 .1 += m.steps;
-            }
-            Direction::UpLeft => {
-                self.0 .0 -= m.steps;
-                self.0 .1 += m.steps;
-            }
-            Direction::DownLeft => {
-                self.0 .0 -= m.steps;
-                self.0 .1 -= m.steps;
-            }
-            Direction::DownRight => {
-                self.0 .0 += m.steps;
-                self.0 .1 -= m.steps;
-            }
-            Direction::On => {}
-        }
+        self.0 = (
+            self.0 .0 + m.direction.to_vec().0,
+            self.0 .1 + m.direction.to_vec().1,
+        );
     }
 }
 
@@ -100,223 +114,59 @@ impl RopeSegment {
         rope
     }
     fn move_segment(&mut self, m: &Move) -> Move {
-        let mut tail_move = Move::new(Direction::On, 0);
+        let mut tail_move = Move::new(Direction::On);
 
-        for _ in 0..m.steps {
-            match &self.head_relative {
-                Direction::On => {
-                    self.head_relative = m.direction;
+        let new_head_relative = self.head_relative.plus(&m.direction);
+
+        if let Some(new_head_relative) = new_head_relative {
+            //Only move the head and the tail stays in the same pos
+            self.head_relative = new_head_relative;
+        } else {
+            let new_relative_head_vec = (
+                self.head_relative.to_vec().0 + m.direction.to_vec().0,
+                self.head_relative.to_vec().1 + m.direction.to_vec().1,
+            );
+
+            let normalized_new_relative_head =
+                Direction::from_vec((new_relative_head_vec.0 / 2, new_relative_head_vec.1 / 2))
+                    .unwrap();
+
+            match (&self.head_relative, m.direction) {
+                (head, move_dir) if *head == move_dir => {
+                    tail_move = Move::new(move_dir);
                 }
-                same_dir if *same_dir == m.direction => {
-                    tail_move = Move::new(m.direction, 1);
-                }
-                opp0site if *opp0site == m.direction.opposite() => {
+                (head, move_dir) if *head == move_dir.opposite() => {
                     self.head_relative = Direction::On;
                 }
-                Direction::Up => match m.direction {
-                    Direction::Left => {
-                        self.head_relative = Direction::UpLeft;
+                (_, _) => match (new_relative_head_vec.0, new_relative_head_vec.1) {
+                    (_, 0) | (0, _) => {
+                        self.head_relative = normalized_new_relative_head;
+                        tail_move = Move::new(normalized_new_relative_head.clone());
                     }
-                    Direction::Right => {
-                        self.head_relative = Direction::UpRight;
+                    (-2, y) | (2, y) => {
+                        self.head_relative = normalized_new_relative_head;
+                        tail_move = Move::new(
+                            normalized_new_relative_head
+                                .plus(&Direction::from_vec((0, y)).unwrap())
+                                .unwrap(),
+                        );
                     }
-                    Direction::UpRight => {
-                        tail_move = Move::new(Direction::UpRight, 1);
-                    }
-                    Direction::UpLeft => {
-                        tail_move = Move::new(Direction::UpLeft, 1);
-                    }
-                    Direction::DownRight => {
-                        self.head_relative = Direction::Right;
-                    }
-                    Direction::DownLeft => {
-                        self.head_relative = Direction::Left;
-                    }
-                    _ => {
-                        panic!("Invalid move from Up, {:?}", m.direction);
-                    }
-                },
-                Direction::Down => match m.direction {
-                    Direction::Left => {
-                        self.head_relative = Direction::DownLeft;
-                    }
-                    Direction::Right => {
-                        self.head_relative = Direction::DownRight;
-                    }
-                    Direction::DownLeft => {
-                        tail_move = Move::new(Direction::DownLeft, 1);
-                    }
-                    Direction::DownRight => {
-                        tail_move = Move::new(Direction::DownRight, 1);
-                    }
-                    Direction::UpLeft => {
-                        self.head_relative = Direction::Left;
-                    }
-                    Direction::UpRight => {
-                        self.head_relative = Direction::Right;
-                    }
-                    _ => {
-                        panic!("Invalid move from Down, {:?}", m.direction);
-                    }
-                },
-                Direction::Left => match m.direction {
-                    Direction::Up => {
-                        self.head_relative = Direction::UpLeft;
-                    }
-                    Direction::Down => {
-                        self.head_relative = Direction::DownLeft;
-                    }
-                    Direction::UpLeft => {
-                        tail_move = Move::new(Direction::UpLeft, 1);
-                    }
-                    Direction::DownLeft => {
-                        tail_move = Move::new(Direction::DownLeft, 1);
-                    }
-                    Direction::UpRight => {
-                        self.head_relative = Direction::Up;
-                    }
-                    Direction::DownRight => {
-                        self.head_relative = Direction::Down;
-                    }
-                    _ => {
-                        panic!("Invalid move from Left, {:?}", m.direction);
-                    }
-                },
-                Direction::Right => match m.direction {
-                    Direction::Up => {
-                        self.head_relative = Direction::UpRight;
-                    }
-                    Direction::Down => {
-                        self.head_relative = Direction::DownRight;
-                    }
-                    Direction::UpRight => {
-                        tail_move = Move::new(Direction::UpRight, 1);
-                    }
-                    Direction::DownRight => {
-                        tail_move = Move::new(Direction::DownRight, 1);
-                    }
-                    Direction::UpLeft => {
-                        self.head_relative = Direction::Up;
-                    }
-                    Direction::DownLeft => {
-                        self.head_relative = Direction::Down;
-                    }
-                    _ => {
-                        panic!("Invalid move from Right, {:?}", m.direction);
-                    }
-                },
-                Direction::UpLeft => match m.direction {
-                    Direction::Up => {
-                        self.head_relative = Direction::Up;
-                        tail_move = Move::new(Direction::UpLeft, 1);
-                    }
-                    Direction::Left => {
-                        self.head_relative = Direction::Left;
-                        tail_move = Move::new(Direction::UpLeft, 1);
-                    }
-                    Direction::Down => {
-                        self.head_relative = Direction::Left;
-                    }
-                    Direction::Right => {
-                        self.head_relative = Direction::Up;
-                    }
-                    Direction::UpRight => {
-                        self.head_relative = Direction::Up;
-                        tail_move = Move::new(Direction::Up, 1);
-                    }
-                    Direction::DownLeft => {
-                        self.head_relative = Direction::Left;
-                        tail_move = Move::new(Direction::Left, 1);
+                    (x, -2) | (x, 2) => {
+                        self.head_relative = normalized_new_relative_head;
+                        tail_move = Move::new(
+                            normalized_new_relative_head
+                                .plus(&Direction::from_vec((x, 0)).unwrap())
+                                .unwrap(),
+                        );
                     }
                     _ => {
                         println!("Invalid move");
                     }
                 },
-                Direction::UpRight => match m.direction {
-                    Direction::Up => {
-                        self.head_relative = Direction::Up;
-                        tail_move = Move::new(Direction::UpRight, 1);
-                    }
-                    Direction::Right => {
-                        self.head_relative = Direction::Right;
-                        tail_move = Move::new(Direction::UpRight, 1);
-                    }
-                    Direction::Down => {
-                        self.head_relative = Direction::Right;
-                    }
-                    Direction::Left => {
-                        self.head_relative = Direction::Up;
-                    }
-                    Direction::UpLeft => {
-                        self.head_relative = Direction::Up;
-                        tail_move = Move::new(Direction::Up, 1);
-                    }
-                    Direction::DownRight => {
-                        self.head_relative = Direction::Right;
-                        tail_move = Move::new(Direction::Right, 1);
-                    }
-                    _ => {
-                        println!("Invalid move from UpRight, {:?}", m.direction);
-                    }
-                },
-                Direction::DownLeft => match m.direction {
-                    Direction::Down => {
-                        self.head_relative = Direction::Down;
-                        tail_move = Move::new(Direction::DownLeft, 1);
-                    }
-                    Direction::Left => {
-                        self.head_relative = Direction::Left;
-                        tail_move = Move::new(Direction::DownLeft, 1);
-                    }
-                    Direction::Up => {
-                        self.head_relative = Direction::Left;
-                    }
-                    Direction::Right => {
-                        self.head_relative = Direction::Down;
-                    }
-                    Direction::DownRight => {
-                        self.head_relative = Direction::Down;
-                        tail_move = Move::new(Direction::Down, 1);
-                    }
-                    Direction::UpLeft => {
-                        self.head_relative = Direction::Left;
-                        tail_move = Move::new(Direction::Left, 1);
-                    }
-                    _ => {
-                        println!("Invalid move from DownLeft, {:?}", m.direction);
-                    }
-                },
-                Direction::DownRight => match m.direction {
-                    Direction::Down => {
-                        self.head_relative = Direction::Down;
-                        tail_move = Move::new(Direction::DownRight, 1);
-                    }
-                    Direction::Right => {
-                        self.head_relative = Direction::Right;
-                        tail_move = Move::new(Direction::DownRight, 1);
-                    }
-                    Direction::Up => {
-                        self.head_relative = Direction::Right;
-                    }
-                    Direction::Left => {
-                        self.head_relative = Direction::Down;
-                    }
-                    Direction::DownLeft => {
-                        self.head_relative = Direction::Down;
-                        tail_move = Move::new(Direction::Down, 1);
-                    }
-                    Direction::UpRight => {
-                        self.head_relative = Direction::Right;
-                        tail_move = Move::new(Direction::Right, 1);
-                    }
-                    _ => {
-                        println!("Invalid move from DownRight, {:?}", m.direction);
-                    }
-                },
             }
-            self.tail.move_pos(&tail_move);
-            self.tail_visited.insert(self.tail);
         }
+        self.tail.move_pos(&tail_move);
+        self.tail_visited.insert(self.tail);
         tail_move
     }
 }
@@ -329,10 +179,7 @@ fn parse_input(input: &str) -> Vec<Move> {
         let direction: Direction = iter.next().unwrap().into();
         let steps = iter.next().unwrap().parse::<i32>().unwrap();
         for _ in 0..steps {
-            result.push(Move {
-                direction,
-                steps: 1,
-            });
+            result.push(Move { direction });
         }
     }
     result
@@ -402,7 +249,6 @@ mod tests {
             result[0],
             Move {
                 direction: Direction::Right,
-                steps: 1
             }
         );
     }
@@ -416,7 +262,6 @@ mod tests {
             result[0],
             Move {
                 direction: Direction::Down,
-                steps: 1
             }
         );
     }
@@ -445,7 +290,10 @@ mod tests {
             tail_visited: HashSet::new(),
         };
 
-        rope.move_segment(&Move::new(Direction::Right, 4));
+        rope.move_segment(&Move::new(Direction::Right));
+        rope.move_segment(&Move::new(Direction::Right));
+        rope.move_segment(&Move::new(Direction::Right));
+        rope.move_segment(&Move::new(Direction::Right));
         assert_eq!(rope.tail, Pos((3, 0)));
     }
 
