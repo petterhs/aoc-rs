@@ -1,27 +1,27 @@
 #[derive(Debug)]
 struct Monkey {
-    id: i32,
-    items: Vec<i32>,
+    id: i64,
+    items: Vec<i64>,
     operation: Operation,
-    test: Operation,
-    if_true: Option<i32>,
-    if_false: Option<i32>,
-    num_inspected_items: i32,
+    divisor: i64,
+    if_true: Option<i64>,
+    if_false: Option<i64>,
+    num_inspected_items: i64,
 }
 impl Monkey {
-    fn new(id: i32) -> Monkey {
+    fn new(id: i64) -> Monkey {
         Monkey {
             id,
             items: Vec::new(),
             operation: Operation::Empty,
-            test: Operation::Empty,
+            divisor: 0,
             if_true: None,
             if_false: None,
             num_inspected_items: 0,
         }
     }
-    fn process_items(&mut self) -> Vec<(i32, i32)> {
-        let mut result: Vec<(i32, i32)> = Vec::new();
+    fn process_items(&mut self, part1: bool, modulus: i64) -> Vec<(i64, i64)> {
+        let mut result: Vec<(i64, i64)> = Vec::new();
 
         //Inspect items
         for item in self.items.iter_mut() {
@@ -38,24 +38,17 @@ impl Monkey {
                 _ => {}
             }
             self.num_inspected_items += 1;
-        }
+            //Decrease items worry after inspection
+            if part1 {
+                *item /= 3;
+            } else {
+                *item %= modulus;
+            }
 
-        //Decrease items worry after inspection
-        for item in self.items.iter_mut() {
-            *item /= 3;
-        }
-
-        //Test items
-        for item in self.items.iter() {
-            match self.test {
-                Operation::DivisibleBy(rhs) => {
-                    if *item % rhs == 0 {
-                        result.push((*item, self.if_true.unwrap()));
-                    } else {
-                        result.push((*item, self.if_false.unwrap()));
-                    }
-                }
-                _ => {}
+            if *item % self.divisor == 0 {
+                result.push((*item, self.if_true.unwrap()));
+            } else {
+                result.push((*item, self.if_false.unwrap()));
             }
         }
 
@@ -68,21 +61,19 @@ impl Monkey {
 
 #[derive(Debug)]
 enum Operation {
-    Add(i32),
-    MultiplyBy(i32),
+    Add(i64),
+    MultiplyBy(i64),
     MultiplyBySelf,
-    DivisibleBy(i32),
     Empty,
 }
 
 impl Operation {
     fn new(operation: &str, rhs: &str) -> Operation {
         match (operation, rhs) {
-            ("+", rhs) => Operation::Add(rhs.parse::<i32>().unwrap()),
+            ("+", rhs) => Operation::Add(rhs.parse::<i64>().unwrap()),
             ("*", "old") => Operation::MultiplyBySelf,
 
-            ("*", rhs) => Operation::MultiplyBy(rhs.parse::<i32>().unwrap()),
-            ("/", rhs) => Operation::DivisibleBy(rhs.parse::<i32>().unwrap()),
+            ("*", rhs) => Operation::MultiplyBy(rhs.parse::<i64>().unwrap()),
             _ => Operation::Empty,
         }
     }
@@ -101,14 +92,14 @@ fn parse_input(input: &str) -> Vec<Monkey> {
                     .split(':')
                     .nth(0)
                     .unwrap()
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .unwrap();
                 monkeys.push(Monkey::new(id));
             }
             Some("Starting") => {
                 let _ = words.next().unwrap();
                 while let Some(item) = words.next() {
-                    let item = item.split(',').nth(0).unwrap().parse::<i32>().unwrap();
+                    let item = item.split(',').nth(0).unwrap().parse::<i64>().unwrap();
                     monkeys.last_mut().unwrap().items.push(item);
                 }
             }
@@ -119,17 +110,16 @@ fn parse_input(input: &str) -> Vec<Monkey> {
                 monkeys.last_mut().unwrap().operation = operation;
             }
             Some("Test:") => {
-                let divider = words.skip(2).next().unwrap();
-                let test = Operation::new("/", divider);
-                monkeys.last_mut().unwrap().test = test;
+                monkeys.last_mut().unwrap().divisor =
+                    words.skip(2).next().unwrap().parse::<i64>().unwrap();
             }
             Some("If") => match words.next() {
                 Some("true:") => {
-                    let if_true_id = words.last().unwrap().parse::<i32>().unwrap();
+                    let if_true_id = words.last().unwrap().parse::<i64>().unwrap();
                     monkeys.last_mut().unwrap().if_true = Some(if_true_id);
                 }
                 Some("false:") => {
-                    let if_false_id = words.last().unwrap().parse::<i32>().unwrap();
+                    let if_false_id = words.last().unwrap().parse::<i64>().unwrap();
                     monkeys.last_mut().unwrap().if_false = Some(if_false_id);
                 }
                 _ => {}
@@ -145,7 +135,7 @@ fn part() {
     let mut monkeys = parse_input(input);
 
     for _ in 0..20 {
-        let mut throws: Vec<(i32, i32)> = Vec::new();
+        let mut throws: Vec<(i64, i64)> = Vec::new();
         for monkey in monkeys.iter_mut() {
             //Check if there are any throws to this monkey in this round
             for throw in throws.iter() {
@@ -155,7 +145,7 @@ fn part() {
             }
             throws.retain(|t| t.1 != monkey.id);
 
-            let result = monkey.process_items();
+            let result = monkey.process_items(true, 0);
             for throw in result {
                 throws.push(throw);
             }
@@ -171,7 +161,56 @@ fn part() {
     let mut num_inspected_items = monkeys
         .iter()
         .map(|m| m.num_inspected_items)
-        .collect::<Vec<i32>>();
+        .collect::<Vec<i64>>();
+
+    num_inspected_items.sort();
+
+    let first = num_inspected_items.pop().unwrap();
+    let second = num_inspected_items.pop().unwrap();
+    println!("Max num inspected items: {}", first);
+    println!("2nd Max num inspected items: {}", second);
+    println!("Monkey business: {}", first * second);
+}
+
+fn part2() {
+    println!("Part 2");
+    let input = include_str!("../input/11");
+    let mut monkeys = parse_input(input);
+
+    let mut modulo = 1;
+    for monkey in &monkeys {
+        modulo *= monkey.divisor;
+    }
+    println!("Modulo: {}", modulo);
+
+    for _ in 0..10000 {
+        let mut throws: Vec<(i64, i64)> = Vec::new();
+        for monkey in monkeys.iter_mut() {
+            //Check if there are any throws to this monkey in this round
+            for throw in throws.iter() {
+                if throw.1 == monkey.id {
+                    monkey.items.push(throw.0);
+                }
+            }
+            throws.retain(|t| t.1 != monkey.id);
+
+            let result = monkey.process_items(false, modulo);
+            for throw in result {
+                throws.push(throw);
+            }
+        }
+
+        //Add throws to monkeys
+        for throw in throws {
+            let monkey = monkeys.iter_mut().find(|m| m.id == throw.1).unwrap();
+            monkey.items.push(throw.0);
+        }
+    }
+
+    let mut num_inspected_items = monkeys
+        .iter()
+        .map(|m| m.num_inspected_items)
+        .collect::<Vec<i64>>();
 
     num_inspected_items.sort();
 
@@ -185,6 +224,7 @@ fn part() {
 pub fn run() {
     println!("Running day11");
     part();
+    part2();
 }
 
 #[cfg(test)]
@@ -196,8 +236,8 @@ mod tests {
         let input = include_str!("../input/test11");
         let mut monkeys = parse_input(input);
 
-        for round in 0..20 {
-            let mut throws: Vec<(i32, i32)> = Vec::new();
+        for _ in 0..20 {
+            let mut throws: Vec<(i64, i64)> = Vec::new();
             for monkey in monkeys.iter_mut() {
                 //Check if there are any throws to this monkey in this round
                 for throw in throws.iter() {
@@ -207,7 +247,7 @@ mod tests {
                 }
                 throws.retain(|t| t.1 != monkey.id);
 
-                let result = monkey.process_items();
+                let result = monkey.process_items(true, 0);
                 for throw in result {
                     throws.push(throw);
                 }
@@ -223,7 +263,7 @@ mod tests {
         let mut num_inspected_items = monkeys
             .iter()
             .map(|m| m.num_inspected_items)
-            .collect::<Vec<i32>>();
+            .collect::<Vec<i64>>();
 
         num_inspected_items.sort();
 
