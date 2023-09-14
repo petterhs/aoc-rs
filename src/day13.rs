@@ -31,34 +31,35 @@ struct PacketPair {
     right: Packet,
 }
 
-fn parse_input(input: &str) -> Vec<PacketPair> {
+fn parse_input(input: &str) -> Vec<Packet> {
     let mut vec = Vec::new();
-
-    let mut left = None;
-    let mut right = None;
     for line in input.lines() {
         match line {
-            "" => {
-                left = None;
-                right = None;
-            }
+            "" => {}
             line => {
                 let packet = parse_packet(line);
-                match (&left, &right) {
-                    (None, None) => left = Some(packet),
-                    (Some(l), None) => {
-                        right = Some(packet.clone());
-                        vec.push(PacketPair {
-                            left: l.clone(),
-                            right: packet.clone(),
-                        });
-                    }
-                    _ => panic!("Invalid input"),
-                }
+                vec.push(packet);
             }
         }
     }
     vec
+}
+
+fn create_pairs(packets: Vec<Packet>) -> Vec<PacketPair> {
+    let mut pairs = Vec::new();
+
+    //iterate over each second packet
+    for i in (0..packets.len()).step_by(2) {
+        let left = packets.get(i).unwrap();
+        if let Some(right) = packets.get(i + 1) {
+            pairs.push(PacketPair {
+                left: left.clone(),
+                right: right.clone(),
+            });
+        }
+    }
+
+    pairs
 }
 
 fn parse_packet(line: &str) -> Packet {
@@ -171,7 +172,9 @@ fn check_packet_order(left: Packet, right: Packet) -> Order {
 fn part1() {
     let input = include_str!("../input/13");
 
-    let packet_pairs = parse_input(input);
+    let packets = parse_input(input);
+
+    let packet_pairs = create_pairs(packets);
 
     let sum_of_correct_indices = packet_pairs
         .iter()
@@ -189,9 +192,47 @@ fn part1() {
     println!("Sum of correct indices: {}", sum_of_correct_indices);
 }
 
+fn part2() {
+    let input = include_str!("../input/13");
+
+    let mut packets = parse_input(input);
+
+    packets.sort_by(|a, b| {
+        let order = check_packet_order(a.clone(), b.clone());
+        match order {
+            Order::Correct => std::cmp::Ordering::Less,
+            Order::Incorrect => std::cmp::Ordering::Greater,
+            Order::Equal => std::cmp::Ordering::Equal,
+        }
+    });
+
+    let divider_packets = PacketPair {
+        left: Packet::Packet(vec![Packet::Value(2)]),
+        right: Packet::Packet(vec![Packet::Value(6)]),
+    };
+
+    let mut indicies = (0, 0);
+    for (i, packet) in packets.iter().enumerate() {
+        if indicies.0 == 0
+            && check_packet_order(divider_packets.left.clone(), packet.clone()) == Order::Correct
+        {
+            indicies.0 = i + 1;
+        }
+        if indicies.1 == 0
+            && check_packet_order(divider_packets.right.clone(), packet.clone()) == Order::Correct
+        {
+            indicies.1 = i + 2;
+            break;
+        }
+    }
+
+    println!("Part2: {}", indicies.0 * indicies.1);
+}
+
 pub fn run() {
     println!("Day 13");
     part1();
+    part2();
 }
 
 #[cfg(test)]
@@ -332,6 +373,8 @@ mod tests {
 
         let packets = parse_input(input);
 
+        let packets_pairs = create_pairs(packets);
+
         let expected_first_pair = PacketPair {
             left: Packet::Packet(vec![
                 Packet::Value(1),
@@ -349,21 +392,22 @@ mod tests {
             ]),
         };
 
-        assert_eq!(packets[0], expected_first_pair);
+        assert_eq!(packets_pairs[0], expected_first_pair);
 
         let expected_6th_pair = PacketPair {
             left: Packet::Packet(vec![]),
             right: Packet::Packet(vec![Packet::Value(3)]),
         };
 
-        assert_eq!(packets[5], expected_6th_pair);
+        assert_eq!(packets_pairs[5], expected_6th_pair);
     }
 
     #[test]
     fn part1() {
         let input = include_str!("../input/test13");
 
-        let packet_pairs = parse_input(input);
+        let packets = parse_input(input);
+        let packet_pairs = create_pairs(packets);
 
         let sum_of_correct_indices = packet_pairs
             .iter()
@@ -388,7 +432,8 @@ mod tests {
     fn test_pair18() {
         let input = include_str!("../input/13");
 
-        let packet_pairs = parse_input(input);
+        let packets = parse_input(input);
+        let packet_pairs = create_pairs(packets);
 
         let pair_18 = packet_pairs.get(32).unwrap();
 
@@ -399,5 +444,45 @@ mod tests {
             check_packet_order(pair_18.left.clone(), pair_18.right.clone()),
             Order::Incorrect
         );
+    }
+
+    #[test]
+    fn test_part2() {
+        let input = include_str!("../input/test13");
+
+        let mut packets = parse_input(input);
+
+        packets.sort_by(|a, b| {
+            let order = check_packet_order(a.clone(), b.clone());
+            match order {
+                Order::Correct => std::cmp::Ordering::Less,
+                Order::Incorrect => std::cmp::Ordering::Greater,
+                Order::Equal => std::cmp::Ordering::Equal,
+            }
+        });
+
+        let divider_packets = PacketPair {
+            left: Packet::Packet(vec![Packet::Value(2)]),
+            right: Packet::Packet(vec![Packet::Value(6)]),
+        };
+
+        let mut indicies = (0, 0);
+        for (i, packet) in packets.iter().enumerate() {
+            if indicies.0 == 0
+                && check_packet_order(divider_packets.left.clone(), packet.clone())
+                    == Order::Correct
+            {
+                indicies.0 = i + 1;
+            }
+            if indicies.1 == 0
+                && check_packet_order(divider_packets.right.clone(), packet.clone())
+                    == Order::Correct
+            {
+                indicies.1 = i + 2;
+                break;
+            }
+        }
+
+        assert_eq!(indicies.0 * indicies.1, 140);
     }
 }
