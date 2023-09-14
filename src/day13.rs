@@ -123,7 +123,7 @@ enum Order {
     Equal,
 }
 
-fn check_packet_order(left: Packet, right: Packet) -> Order {
+fn check_packet_order(left: &Packet, right: &Packet) -> Order {
     match (left, right) {
         (Packet::Value(l), Packet::Value(r)) => {
             if l < r {
@@ -134,11 +134,11 @@ fn check_packet_order(left: Packet, right: Packet) -> Order {
                 Order::Equal
             }
         }
-        (Packet::Value(l), Packet::Packet(r)) => {
-            return check_packet_order(Packet::Packet(vec![Packet::Value(l)]), Packet::Packet(r));
+        (Packet::Value(_), Packet::Packet(_)) => {
+            return check_packet_order(&Packet::Packet(vec![left.clone()]), right);
         }
-        (Packet::Packet(l), Packet::Value(r)) => {
-            return check_packet_order(Packet::Packet(l), Packet::Packet(vec![Packet::Value(r)]));
+        (Packet::Packet(_), Packet::Value(_)) => {
+            return check_packet_order(left, &Packet::Packet(vec![right.clone()]));
         }
         (Packet::Packet(l), Packet::Packet(r)) => {
             if l.len() == 0 && r.len() == 0 {
@@ -147,7 +147,7 @@ fn check_packet_order(left: Packet, right: Packet) -> Order {
             for i in 0..l.len() {
                 let li = l.get(i).unwrap();
                 if let Some(ri) = r.get(i) {
-                    let order = check_packet_order(li.clone(), ri.clone());
+                    let order = check_packet_order(li, ri);
                     match order {
                         Order::Correct => {
                             return Order::Correct;
@@ -180,7 +180,7 @@ fn part1() {
         .iter()
         .enumerate()
         .map(
-            |(i, pair)| match check_packet_order(pair.left.clone(), pair.right.clone()) {
+            |(i, pair)| match check_packet_order(&pair.left, &pair.right) {
                 Order::Incorrect => 0,
                 _ => i + 1,
             },
@@ -198,7 +198,7 @@ fn part2() {
     let mut packets = parse_input(input);
 
     packets.sort_by(|a, b| {
-        let order = check_packet_order(a.clone(), b.clone());
+        let order = check_packet_order(a, b);
         match order {
             Order::Correct => std::cmp::Ordering::Less,
             Order::Incorrect => std::cmp::Ordering::Greater,
@@ -213,14 +213,10 @@ fn part2() {
 
     let mut indicies = (0, 0);
     for (i, packet) in packets.iter().enumerate() {
-        if indicies.0 == 0
-            && check_packet_order(divider_packets.left.clone(), packet.clone()) == Order::Correct
-        {
+        if indicies.0 == 0 && check_packet_order(&divider_packets.left, packet) == Order::Correct {
             indicies.0 = i + 1;
         }
-        if indicies.1 == 0
-            && check_packet_order(divider_packets.right.clone(), packet.clone()) == Order::Correct
-        {
+        if indicies.1 == 0 && check_packet_order(&divider_packets.right, packet) == Order::Correct {
             indicies.1 = i + 2;
             break;
         }
@@ -413,7 +409,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, pair)| {
-                if check_packet_order(pair.left.clone(), pair.right.clone()) == Order::Incorrect {
+                if check_packet_order(&pair.left, &pair.right) == Order::Incorrect {
                     0
                 } else {
                     println!("Correct: {}", i + 1);
@@ -441,7 +437,7 @@ mod tests {
         println!("Pair 18: {}", pair_18.right);
 
         assert_eq!(
-            check_packet_order(pair_18.left.clone(), pair_18.right.clone()),
+            check_packet_order(&pair_18.left, &pair_18.right),
             Order::Incorrect
         );
     }
@@ -453,7 +449,7 @@ mod tests {
         let mut packets = parse_input(input);
 
         packets.sort_by(|a, b| {
-            let order = check_packet_order(a.clone(), b.clone());
+            let order = check_packet_order(a, b);
             match order {
                 Order::Correct => std::cmp::Ordering::Less,
                 Order::Incorrect => std::cmp::Ordering::Greater,
@@ -469,14 +465,12 @@ mod tests {
         let mut indicies = (0, 0);
         for (i, packet) in packets.iter().enumerate() {
             if indicies.0 == 0
-                && check_packet_order(divider_packets.left.clone(), packet.clone())
-                    == Order::Correct
+                && check_packet_order(&divider_packets.left, packet) == Order::Correct
             {
                 indicies.0 = i + 1;
             }
             if indicies.1 == 0
-                && check_packet_order(divider_packets.right.clone(), packet.clone())
-                    == Order::Correct
+                && check_packet_order(&divider_packets.right, packet) == Order::Correct
             {
                 indicies.1 = i + 2;
                 break;
