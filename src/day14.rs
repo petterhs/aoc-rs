@@ -35,8 +35,6 @@ impl RockPath {
         }
 
         let (last_x, last_y) = self.0.last().unwrap().clone();
-        println!("last: ({}, {})", last_x, last_y);
-        println!("new: ({}, {})", x, y);
 
         if self.0.is_empty() {
             self.0.push((x, y));
@@ -44,7 +42,6 @@ impl RockPath {
             //Add points from last point to the new point
             if x == last_x {
                 let y_diff = y - last_y;
-                println!("y_diff: {:?}", y_diff);
                 if y_diff > 0 {
                     for y in 0..y_diff {
                         self.0.push((x, last_y + y + 1));
@@ -56,7 +53,6 @@ impl RockPath {
                 }
             } else if y == last_y {
                 let x_diff = x - last_x;
-                println!("x_diff: {:?}", x_diff);
                 if x_diff > 0 {
                     for x in 0..x_diff {
                         self.0.push((last_x + x + 1, y));
@@ -192,19 +188,38 @@ fn part1() -> i32 {
         .map(|l| l.parse::<RockPath>().unwrap())
         .collect::<Vec<RockPath>>();
     rocks.iter_mut().for_each(|r| cave_map.add_rocks(r));
-    println!("{}", cave_map);
 
     let mut dropped_sand = 0;
     while let Ok(()) = cave_map.drop_one_sand(&500, &0) {
         dropped_sand += 1;
-        println!("{}", cave_map);
     }
+    println!("{}", cave_map);
     println!("Dropped sand: {}", dropped_sand);
     dropped_sand
 }
 
 fn part2() -> i32 {
-    0
+    let input = include_str!("../input/14");
+    let mut cave_map = CaveMap::new();
+    let mut rocks = input
+        .lines()
+        .map(|l| l.parse::<RockPath>().unwrap())
+        .collect::<Vec<RockPath>>();
+    rocks.iter_mut().for_each(|r| cave_map.add_rocks(r));
+
+    let mut ground_floor = RockPath::new();
+    ground_floor.add_point((1, cave_map.y_limit + 2));
+    ground_floor.add_point((998, cave_map.y_limit + 2));
+
+    cave_map.add_rocks(&mut ground_floor);
+
+    let mut dropped_sand = 0;
+    while let Ok(()) = cave_map.drop_one_sand(&500, &0) {
+        dropped_sand += 1;
+    }
+
+    println!("Dropped sand: {}", dropped_sand);
+    dropped_sand
 }
 
 pub fn run() {
@@ -265,6 +280,27 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(part2(), 0);
+        let input = include_str!("../input/test14");
+        let mut cave_map = CaveMap::new();
+        let mut rocks = input
+            .lines()
+            .map(|l| l.parse::<RockPath>().unwrap())
+            .collect::<Vec<RockPath>>();
+        rocks.iter_mut().for_each(|r| cave_map.add_rocks(r));
+        println!("{}", cave_map);
+
+        let mut ground_floor = RockPath::new();
+        ground_floor.add_point((cave_map.x_limits.0 - 15, cave_map.y_limit + 2));
+        ground_floor.add_point((cave_map.x_limits.1 + 15, cave_map.y_limit + 2));
+
+        cave_map.add_rocks(&mut ground_floor);
+
+        let mut dropped_sand = 0;
+        while let Ok(()) = cave_map.drop_one_sand(&500, &0) {
+            dropped_sand += 1;
+            println!("{}", cave_map);
+        }
+        println!("Dropped sand: {}", dropped_sand);
+        assert!(false);
     }
 }
