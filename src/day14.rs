@@ -301,6 +301,6 @@ mod tests {
             println!("{}", cave_map);
         }
         println!("Dropped sand: {}", dropped_sand);
-        assert!(false);
+        assert_eq!(dropped_sand, 93);
     }
 }
