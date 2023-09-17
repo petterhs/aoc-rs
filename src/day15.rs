@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::VecDeque, str::FromStr};
 
 #[derive(Debug)]
 struct Sensor {
@@ -65,14 +65,134 @@ fn part1() {
     println!("Part 1: {}", covered_positions);
 }
 
-fn part2() {
-    println!("Part 2: {}", 0);
+fn check_if_covered(sensors: &Vec<Sensor>, x: i32, y: i32) -> bool {
+    for s in sensors {
+        if (x, y) == s.position || (x, y) == s.closest_beacon {
+            return true;
+        }
+        let dist = manhatten_distance((x, y), s.position);
+        if dist <= s.range {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_pos_not_covered(sensors: &Vec<Sensor>, size: i32) -> Option<(i32, i32)> {
+    for s in sensors {
+        println!("{:?}", s);
+
+        //iterate over all positions 1 step away from sensor range
+        //check if any sensor covers that position
+
+        //Start at the top of the sensor range + 1 and go down each side
+        let mut queue = VecDeque::new();
+        queue.push_back((s.position.0, s.position.1 - s.range - 1));
+
+        // println!("From top , going down left");
+        while let Some((x, y)) = queue.pop_front() {
+            if y > s.position.1 {
+                break;
+            }
+
+            queue.push_back((x - 1, y + 1));
+            if x < 0 || y < 0 || x > size || y > size {
+                continue;
+            }
+            // println!("({}, {}) ", x, y);
+
+            let covered = check_if_covered(&sensors, x, y);
+
+            if !covered {
+                return Some((x, y));
+            }
+        }
+
+        queue.clear();
+        queue.push_back((s.position.0, s.position.1 - s.range - 1));
+
+        // println!("From top , going down right");
+        while let Some((x, y)) = queue.pop_front() {
+            if y > s.position.1 {
+                break;
+            }
+
+            queue.push_back((x + 1, y + 1));
+
+            if x < 0 || y < 0 || x > size || y > size {
+                continue;
+            }
+            // println!("({}, {}) ", x, y);
+
+            let covered = check_if_covered(&sensors, x, y);
+
+            if !covered {
+                return Some((x, y));
+            }
+        }
+
+        queue.clear();
+        queue.push_back((s.position.0, s.position.1 + s.range + 1));
+
+        // println!("From bottom , going up left");
+        while let Some((x, y)) = queue.pop_front() {
+            if y < s.position.1 {
+                break;
+            }
+
+            queue.push_back((x - 1, y - 1));
+            if x < 0 || y < 0 || x > size || y > size {
+                continue;
+            }
+
+            let covered = check_if_covered(&sensors, x, y);
+
+            if !covered {
+                return Some((x, y));
+            }
+        }
+
+        queue.clear();
+        queue.push_back((s.position.0, s.position.1 + s.range + 1));
+
+        // println!("From bottom , going up right");
+        while let Some((x, y)) = queue.pop_front() {
+            if y < s.position.1 {
+                break;
+            }
+
+            queue.push_back((x + 1, y - 1));
+
+            if x < 0 || y < 0 || x > size || y > size {
+                continue;
+            }
+
+            let covered = check_if_covered(&sensors, x, y);
+
+            if !covered {
+                return Some((x, y));
+            }
+        }
+    }
+    None
+}
+
+fn part2_bruteforce() {
+    let input = include_str!("../input/15");
+    let sensors = input
+        .lines()
+        .map(|s| Sensor::from_str(s).unwrap())
+        .collect::<Vec<Sensor>>();
+
+    let (x, y) = find_pos_not_covered(&sensors, 4000000).unwrap();
+
+    println!("Part 2: {}", x as i64 * 4000000 + y as i64);
 }
 
 pub fn run() {
     println!("Day 15");
     part1();
-    part2();
+    part2_bruteforce();
 }
 
 #[cfg(test)]
@@ -143,5 +263,20 @@ mod tests {
         }
         println!("Covered positions: {}", covered_positions);
         assert_eq!(covered_positions, 26);
+    }
+
+    #[test]
+    fn part2() {
+        let input = include_str!("../input/test15");
+        let sensors = input
+            .lines()
+            .map(|s| Sensor::from_str(s).unwrap())
+            .collect::<Vec<Sensor>>();
+
+        let (x, y) = find_pos_not_covered(&sensors, 21).unwrap();
+
+        println!("Part 2: {}, {}", x, y);
+
+        assert_eq!(x * 4000000 + y, 56000011);
     }
 }
