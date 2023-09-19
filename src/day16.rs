@@ -1,8 +1,6 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
-    thread::sleep,
-    time::Duration,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,7 +90,6 @@ impl Graph {
         let name = valve[0].split("Valve ").collect::<Vec<&str>>()[1];
         let flow_rate = valve[1].parse::<i32>().unwrap();
 
-        println!("{} {}", name, flow_rate);
         self.add_valve(name, flow_rate);
 
         let tunnels = s[1]
@@ -104,7 +101,6 @@ impl Graph {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        println!("{:?}", tunnels);
         self.add_tunnels(name, tunnels, 1);
     }
 
@@ -126,36 +122,46 @@ impl Graph {
             let valvename = valve.to_string();
             let outputs = self.tunnels[valve].clone();
 
-            println!("Removing valve {}", valvename);
-
             let valve = self.valves.get(&valvename).unwrap();
 
             self.tunnels
                 .iter_mut()
                 .filter(|(_, v)| v.iter().any(|tunnel| tunnel.to == valve.name))
                 .for_each(|(k, v)| {
+                    let time = v
+                        .iter()
+                        .find(|tunnel| tunnel.to == valve.name)
+                        .unwrap()
+                        .time;
+
                     //delete tunnel to removed valve
                     v.retain(|tunnel| tunnel.to != valve.name);
-                    println!("Mutating from {}: {:?}", k, v);
 
                     //add tunnels to all outputs
                     for output in &outputs {
                         if output.to == *k {
                             continue;
                         }
-                        println!("Adding tunnel from {} to {}", k, output.to);
-                        v.push(Tunnel::new(k, &output.to, output.time + 1));
+                        v.iter_mut().for_each(|tunnel| {
+                            if tunnel.to == output.to {
+                                if tunnel.time > output.time + 1 {
+                                    tunnel.time = output.time + 1;
+                                }
+                            }
+                        });
+
+                        if v.iter().any(|tunnel| tunnel.to == output.to) {
+                            continue;
+                        }
+
+                        v.push(Tunnel::new(k, &output.to, output.time + time));
                     }
-                    println!("Mutated from {}: {:?}", k, v);
                 });
 
             if valvename != "AA" {
                 self.valves.remove(valvename.as_str());
                 self.tunnels.remove(valvename.as_str());
             }
-
-            println!("{}", self);
-            println!("{:#?}", self.tunnels);
         });
     }
 
@@ -172,26 +178,25 @@ impl Graph {
             pressure_released,
         ));
 
-        let mut possibilites = vec![];
+        let mut max = 0;
 
         let mut cache = HashSet::new();
 
         while let Some((valve, opened_valves, time_left, pressure_released)) = stack.pop() {
             if time_left <= 0 {
-                possibilites.push(pressure_released);
+                max = max.max(pressure_released);
                 continue;
             }
 
             if opened_valves.len() == self.valves.len() {
-                possibilites.push(pressure_released);
+                max = max.max(pressure_released);
                 continue;
             }
 
             if cache.contains(&(valve.clone(), opened_valves.clone(), time_left)) {
+                max = max.max(pressure_released);
                 continue;
             }
-
-            // sleep(Duration::from_millis(100));
 
             // println!(
             //     "Valve: {} {:?}{} {}",
@@ -211,7 +216,7 @@ impl Graph {
                 ));
 
                 if opened_valves.contains(&valve.name.as_str()) {
-                    break;
+                    continue;
                 }
                 // //Opening current valve
 
@@ -224,7 +229,7 @@ impl Graph {
                 //     valve.name, tunnel.to
                 // );
                 stack.push((
-                    tunnel.to.clone(),
+                    tunnel.to.to_string(),
                     opened_valves,
                     time_left - tunnel.time - 1,
                     pressure_released,
@@ -235,8 +240,7 @@ impl Graph {
         }
 
         // println!("{:?}", possibilites);
-
-        *possibilites.iter().max().unwrap()
+        max
     }
 }
 
@@ -274,11 +278,10 @@ mod tests {
         graph.parse_line(input);
 
         assert_eq!(graph.valves.len(), 1);
-        assert!(false);
     }
 
     #[test]
-    fn parse_test_input() {
+    fn parse_optimize_graph() {
         let mut graph = Graph::new();
         let input = include_str!("../input/test16");
 
@@ -290,9 +293,76 @@ mod tests {
 
         graph.optimize_graph();
 
-        print!("{}", graph);
+        assert_eq!(graph.valves.len(), 7);
+        assert_eq!(graph.tunnels.len(), 7);
 
-        assert!(false);
+        println!("{}", graph);
+
+        let mut tunnel_aa = graph.tunnels.get("AA").unwrap().clone();
+        tunnel_aa.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_aa,
+            vec![
+                Tunnel::new("AA", "BB", 1),
+                Tunnel::new("AA", "DD", 1),
+                Tunnel::new("AA", "JJ", 2),
+            ]
+        );
+
+        let mut tunnel_bb = graph.tunnels.get("BB").unwrap().clone();
+        tunnel_bb.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_bb,
+            vec![
+                Tunnel::new("BB", "CC", 1),
+                Tunnel::new("BB", "DD", 2),
+                Tunnel::new("BB", "JJ", 3),
+            ]
+        );
+
+        let mut tunnel_cc = graph.tunnels.get("CC").unwrap().clone();
+        tunnel_cc.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_cc,
+            vec![Tunnel::new("CC", "BB", 1), Tunnel::new("CC", "DD", 1),]
+        );
+
+        let mut tunnel_dd = graph.tunnels.get("DD").unwrap().clone();
+        tunnel_dd.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_dd,
+            vec![
+                Tunnel::new("DD", "BB", 2),
+                Tunnel::new("DD", "CC", 1),
+                Tunnel::new("DD", "EE", 1),
+                Tunnel::new("DD", "JJ", 3),
+            ]
+        );
+
+        let mut tunnel_ee = graph.tunnels.get("EE").unwrap().clone();
+        tunnel_ee.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_ee,
+            vec![Tunnel::new("EE", "DD", 1), Tunnel::new("EE", "HH", 3),]
+        );
+
+        let mut tunnel_hh = graph.tunnels.get("HH").unwrap().clone();
+        tunnel_hh.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(tunnel_hh, vec![Tunnel::new("HH", "EE", 3),]);
+
+        let mut tunnel_jj = graph.tunnels.get("JJ").unwrap().clone();
+        tunnel_jj.sort_by(|a, b| a.to.cmp(&b.to));
+
+        assert_eq!(
+            tunnel_jj,
+            vec![Tunnel::new("JJ", "BB", 3), Tunnel::new("JJ", "DD", 3),]
+        );
     }
 
     #[test]
@@ -307,7 +377,6 @@ mod tests {
         graph.optimize_graph();
 
         assert_eq!(graph.df_max_flow_rate("AA"), 1651);
-        assert!(false);
     }
 
     #[test]
