@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
+    time::Instant,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -214,13 +215,55 @@ fn part1() -> i32 {
 }
 
 fn part2() -> i32 {
-    0
+    let mut graph = Graph::new();
+    let input = include_str!("../input/16");
+
+    for line in input.lines() {
+        graph.parse_line(line);
+    }
+
+    graph.optimize_graph();
+
+    //find the maximum number of different bitmasks
+    let num_valves = graph.valves.len();
+    println!("num_valves: {}", num_valves);
+
+    let num_bitmasks = 2_u32.pow(num_valves as u32);
+    println!("num_bitmasks: {}", num_bitmasks);
+
+    let mut max = 0;
+    let mut bitmask_index = HashMap::new();
+
+    for (i, valve) in graph.valves.keys().enumerate() {
+        bitmask_index.insert(valve.clone(), i);
+    }
+
+    let mut cache = HashMap::new();
+    // let mut cache2 = HashMap::new();
+
+    for i in 0..num_bitmasks {
+        let pressure_released = graph.dfs("AA".to_string(), 26, i, &bitmask_index, &mut cache)
+            + graph.dfs("AA".to_string(), 26, !i, &bitmask_index, &mut cache);
+
+        if pressure_released > max {
+            println!("i: {}, pressure_released: {}", i, pressure_released);
+            max = pressure_released;
+        }
+    }
+
+    max
 }
 
 pub fn run() {
     println!("Day 16");
+
+    let start = Instant::now();
     println!("Part1: {}", part1());
-    part2();
+    println!("Time: {}", start.elapsed().as_millis());
+
+    let start = Instant::now();
+    println!("Part!: {}", part2());
+    println!("Time: {}", start.elapsed().as_millis());
 }
 
 #[cfg(test)]
@@ -419,6 +462,38 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(part2(), 0);
+        let mut graph = Graph::new();
+        let input = include_str!("../input/test16");
+
+        for line in input.lines() {
+            graph.parse_line(line);
+        }
+
+        graph.optimize_graph();
+
+        //find the maximum number of different bitmasks
+        let num_valves = graph.valves.len();
+
+        let num_bitmasks = 2_u32.pow(num_valves as u32);
+
+        let mut max = 0;
+        let mut bitmask_index = HashMap::new();
+
+        for (i, valve) in graph.valves.keys().enumerate() {
+            bitmask_index.insert(valve.clone(), i);
+        }
+
+        let mut cache = HashMap::new();
+        // let mut cache2 = HashMap::new();
+
+        for i in 0..num_bitmasks {
+            let pressure_released = graph.dfs("AA".to_string(), 26, i, &bitmask_index, &mut cache)
+                + graph.dfs("AA".to_string(), 26, !i, &bitmask_index, &mut cache);
+
+            if pressure_released > max {
+                max = pressure_released;
+            }
+        }
+        assert_eq!(max, 1707);
     }
 }
