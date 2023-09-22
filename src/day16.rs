@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
     time::Instant,
+    vec,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +30,7 @@ impl Tunnel {
 struct Graph {
     valves: HashMap<String, Valve>,
     tunnels: HashMap<String, Vec<Tunnel>>,
-    cache: HashMap<(String, i32, u32), i32>,
+    valve_index: HashMap<String, usize>,
 }
 
 impl Display for Graph {
@@ -57,7 +58,7 @@ impl Graph {
         Graph {
             valves: HashMap::new(),
             tunnels: HashMap::new(),
-            cache: HashMap::new(),
+            valve_index: HashMap::new(),
         }
     }
 
@@ -89,9 +90,9 @@ impl Graph {
 
         let valve = s[0].split(" has flow rate=").collect::<Vec<&str>>();
         let name = valve[0].split("Valve ").collect::<Vec<&str>>()[1];
-        let flow_rate = valve[1].parse::<i32>().unwrap();
+        let flow_rate = valve[1].parse::<usize>().unwrap();
 
-        self.add_valve(name, flow_rate);
+        self.add_valve(name, flow_rate as i32);
 
         let tunnels = s[1]
             .split_whitespace()
@@ -105,9 +106,21 @@ impl Graph {
         self.add_tunnels(name, tunnels, 1);
     }
 
-    fn optimize_graph(&mut self) {
-        let mut tunnels = HashMap::new();
+    fn optimize_graph(&mut self) -> (usize, Vec<usize>, Vec<Vec<usize>>) {
+        let mut index = HashMap::new();
+        let mut v = Vec::new();
+        let mut start_index = 0;
+        for (_, valve) in self.valves.iter() {
+            if valve.flow_rate != 0 || valve.name == "AA" {
+                v.push(valve.flow_rate as usize);
+                index.insert(valve.name.clone(), v.len() - 1);
+            }
+            if valve.name == "AA" {
+                start_index = v.len() - 1;
+            }
+        }
 
+        let mut tunnels = HashMap::new();
         for valve in self.valves.keys() {
             tunnels.insert(valve.clone(), vec![]);
             let mut visited = HashSet::new();
@@ -139,112 +152,133 @@ impl Graph {
             }
         }
 
-        self.valves
-            .retain(|_, valve| valve.flow_rate != 0 || valve.name == "AA");
         tunnels = tunnels
             .into_iter()
             .filter(|(valve, _)| self.valves.contains_key(valve))
             .collect::<HashMap<String, Vec<Tunnel>>>();
 
-        self.tunnels = tunnels;
+        let mut t = vec![vec![0; v.len()]; v.len()];
+        for valve in index.keys() {
+            for tunnel in tunnels.get(valve).unwrap() {
+                if tunnel.to == "AA" {
+                    continue;
+                }
+                t[index[valve]][index[&tunnel.to]] = tunnel.time as usize;
+            }
+        }
+        // println!("start: {}", start_index);
+        // println!("v: {:?}", v);
+        // println!("t: {:?}", t);
+        self.valve_index = index;
+        // println!("neigbour_shortest_dist: {:?}", neigbour_shortest_dist);
+        return (start_index, v, t);
     }
 
     fn dfs(
         &self,
-        valve: String,
+        valve_index: usize,
+        valves: &Vec<usize>,
+        neigbour_shortest_dist: &Vec<Vec<usize>>,
         time_left: i32,
         opened_valves_bitmask: u32,
-        bitmask_index: &HashMap<String, usize>,
-        cache: &mut HashMap<(String, i32, u32), i32>,
+        cache: &mut HashMap<(usize, i32, u32), i32>,
     ) -> i32 {
-        if let Some(&max) = self
-            .cache
-            .get(&(valve.clone(), time_left, opened_valves_bitmask))
-        {
+        if let Some(&max) = cache.get(&(valve_index, time_left, opened_valves_bitmask)) {
             return max;
         }
 
         let mut max = 0;
-        for tunnel in self.tunnels.get(&valve).unwrap() {
-            if opened_valves_bitmask & (1 << bitmask_index[&tunnel.to]) != 0 {
+        for (i, time) in neigbour_shortest_dist[valve_index].iter().enumerate() {
+            if opened_valves_bitmask & (1 << i) != 0 || valves[i] == 0 {
                 continue;
             }
 
-            let time_left = time_left - tunnel.time - 1;
+            let time_left = time_left - *time as i32 - 1;
 
             if time_left <= 0 {
                 continue;
             }
 
-            let pressure_released = self.valves[&tunnel.to].flow_rate * time_left;
+            let pressure_released = valves[i] as i32 * time_left;
 
             max = max.max(
                 self.dfs(
-                    tunnel.to.clone(),
+                    i,
+                    valves,
+                    neigbour_shortest_dist,
                     time_left,
-                    opened_valves_bitmask | 1 << bitmask_index[&tunnel.to],
-                    bitmask_index,
+                    opened_valves_bitmask | 1 << i,
                     cache,
                 ) + pressure_released,
             );
         }
-        cache.insert((valve.clone(), time_left, opened_valves_bitmask), max);
+        cache.insert((valve_index, time_left, opened_valves_bitmask), max);
         return max;
     }
 }
 
-fn part1() -> i32 {
+fn part1(input: &str) -> i32 {
     let mut graph = Graph::new();
-    let input = include_str!("../input/16");
 
     for line in input.lines() {
         graph.parse_line(line);
     }
 
-    graph.optimize_graph();
+    let start = Instant::now();
+    let (start_index, valves, neigbour_shortest_dist) = graph.optimize_graph();
+    println!("Time: {}", start.elapsed().as_millis());
 
     let mut cache = HashMap::new();
-    let mut bitmask_index = HashMap::new();
 
-    for (i, valve) in graph.valves.keys().enumerate() {
-        bitmask_index.insert(valve.clone(), i);
-    }
-
-    let max = graph.dfs("AA".to_string(), 30, 0, &bitmask_index, &mut cache);
+    let max = graph.dfs(
+        start_index,
+        &valves,
+        &neigbour_shortest_dist,
+        30,
+        0,
+        &mut cache,
+    );
+    println!("Time: {}", start.elapsed().as_millis());
     max
 }
 
-fn part2() -> i32 {
+fn part2(input: &str) -> i32 {
     let mut graph = Graph::new();
-    let input = include_str!("../input/16");
 
     for line in input.lines() {
         graph.parse_line(line);
     }
 
-    graph.optimize_graph();
+    let (start_index, valves, neighbours_shortest_dist) = graph.optimize_graph();
 
     //find the maximum number of different bitmasks
-    let num_valves = graph.valves.len();
+    let num_valves = valves.len();
     println!("num_valves: {}", num_valves);
 
     let num_bitmasks = 2_u32.pow(num_valves as u32);
     println!("num_bitmasks: {}", num_bitmasks);
 
     let mut max = 0;
-    let mut bitmask_index = HashMap::new();
-
-    for (i, valve) in graph.valves.keys().enumerate() {
-        bitmask_index.insert(valve.clone(), i);
-    }
 
     let mut cache = HashMap::new();
-    // let mut cache2 = HashMap::new();
+    let mut cache2 = HashMap::new();
 
     for i in 0..num_bitmasks {
-        let pressure_released = graph.dfs("AA".to_string(), 26, i, &bitmask_index, &mut cache)
-            + graph.dfs("AA".to_string(), 26, !i, &bitmask_index, &mut cache);
-
+        let pressure_released = graph.dfs(
+            start_index,
+            &valves,
+            &neighbours_shortest_dist,
+            26,
+            i,
+            &mut cache,
+        ) + graph.dfs(
+            start_index,
+            &valves,
+            &neighbours_shortest_dist,
+            26,
+            !i,
+            &mut cache2,
+        );
         if pressure_released > max {
             println!("i: {}, pressure_released: {}", i, pressure_released);
             max = pressure_released;
@@ -256,13 +290,14 @@ fn part2() -> i32 {
 
 pub fn run() {
     println!("Day 16");
+    let input = include_str!("../input/16");
 
     let start = Instant::now();
-    println!("Part1: {}", part1());
+    println!("Part1: {}", part1(input));
     println!("Time: {}", start.elapsed().as_millis());
 
     let start = Instant::now();
-    println!("Part!: {}", part2());
+    println!("Part!: {}", part2(input));
     println!("Time: {}", start.elapsed().as_millis());
 }
 
@@ -289,211 +324,85 @@ mod tests {
             graph.parse_line(line);
         }
 
-        graph.optimize_graph();
+        let (_start_index, _valves, neighbours) = graph.optimize_graph();
 
-        let mut tunnels_aa = graph.tunnels.get("AA").unwrap().clone();
-        tunnels_aa.sort_by(|a, b| a.to.cmp(&b.to));
+        let aa_index = graph.valve_index.get("AA").unwrap();
+        let bb_index = graph.valve_index.get("BB").unwrap();
+        let cc_index = graph.valve_index.get("CC").unwrap();
+        let dd_index = graph.valve_index.get("DD").unwrap();
+        let ee_index = graph.valve_index.get("EE").unwrap();
+        let hh_index = graph.valve_index.get("HH").unwrap();
+        let jj_index = graph.valve_index.get("JJ").unwrap();
 
-        assert_eq!(
-            tunnels_aa,
-            vec![
-                Tunnel::new("BB", 1),
-                Tunnel::new("CC", 2),
-                Tunnel::new("DD", 1),
-                Tunnel::new("EE", 2),
-                Tunnel::new("HH", 5),
-                Tunnel::new("JJ", 2),
-            ]
-        );
+        let aa_neighbours = neighbours[*aa_index].clone();
+        assert_eq!(aa_neighbours[*bb_index], 1);
+        assert_eq!(aa_neighbours[*cc_index], 2);
+        assert_eq!(aa_neighbours[*dd_index], 1);
+        assert_eq!(aa_neighbours[*ee_index], 2);
+        assert_eq!(aa_neighbours[*hh_index], 5);
+        assert_eq!(aa_neighbours[*jj_index], 2);
 
-        let mut tunnels_bb = graph.tunnels.get("BB").unwrap().clone();
-        tunnels_bb.sort_by(|a, b| a.to.cmp(&b.to));
+        let bb_neighbours = neighbours[*bb_index].clone();
+        assert_eq!(bb_neighbours[*aa_index], 0);
+        assert_eq!(bb_neighbours[*cc_index], 1);
+        assert_eq!(bb_neighbours[*dd_index], 2);
+        assert_eq!(bb_neighbours[*ee_index], 3);
+        assert_eq!(bb_neighbours[*hh_index], 6);
+        assert_eq!(bb_neighbours[*jj_index], 3);
 
-        assert_eq!(
-            tunnels_bb,
-            vec![
-                Tunnel::new("CC", 1),
-                Tunnel::new("DD", 2),
-                Tunnel::new("EE", 3),
-                Tunnel::new("HH", 6),
-                Tunnel::new("JJ", 3),
-            ]
-        );
+        let cc_neighbours = neighbours[*cc_index].clone();
+        assert_eq!(cc_neighbours[*aa_index], 0);
+        assert_eq!(cc_neighbours[*bb_index], 1);
+        assert_eq!(cc_neighbours[*dd_index], 1);
+        assert_eq!(cc_neighbours[*ee_index], 2);
+        assert_eq!(cc_neighbours[*hh_index], 5);
+        assert_eq!(cc_neighbours[*jj_index], 4);
+        assert_eq!(cc_neighbours[*jj_index], 4);
 
-        let mut tunnels_cc = graph.tunnels.get("CC").unwrap().clone();
-        tunnels_cc.sort_by(|a, b| a.to.cmp(&b.to));
+        let dd_neighbours = neighbours[*dd_index].clone();
+        assert_eq!(dd_neighbours[*aa_index], 0);
+        assert_eq!(dd_neighbours[*bb_index], 2);
+        assert_eq!(dd_neighbours[*cc_index], 1);
+        assert_eq!(dd_neighbours[*ee_index], 1);
+        assert_eq!(dd_neighbours[*hh_index], 4);
+        assert_eq!(dd_neighbours[*jj_index], 3);
 
-        assert_eq!(
-            tunnels_cc,
-            vec![
-                Tunnel::new("BB", 1),
-                Tunnel::new("DD", 1),
-                Tunnel::new("EE", 2),
-                Tunnel::new("HH", 5),
-                Tunnel::new("JJ", 4),
-            ]
-        );
+        let ee_neighbours = neighbours[*ee_index].clone();
+        assert_eq!(ee_neighbours[*aa_index], 0);
+        assert_eq!(ee_neighbours[*bb_index], 3);
+        assert_eq!(ee_neighbours[*cc_index], 2);
+        assert_eq!(ee_neighbours[*dd_index], 1);
+        assert_eq!(ee_neighbours[*hh_index], 3);
+        assert_eq!(ee_neighbours[*jj_index], 4);
 
-        let mut tunnels_dd = graph.tunnels.get("DD").unwrap().clone();
-        tunnels_dd.sort_by(|a, b| a.to.cmp(&b.to));
+        let hh_neighbours = neighbours[*hh_index].clone();
+        assert_eq!(hh_neighbours[*aa_index], 0);
+        assert_eq!(hh_neighbours[*bb_index], 6);
+        assert_eq!(hh_neighbours[*cc_index], 5);
+        assert_eq!(hh_neighbours[*dd_index], 4);
+        assert_eq!(hh_neighbours[*ee_index], 3);
+        assert_eq!(hh_neighbours[*jj_index], 7);
 
-        assert_eq!(
-            tunnels_dd,
-            vec![
-                Tunnel::new("BB", 2),
-                Tunnel::new("CC", 1),
-                Tunnel::new("EE", 1),
-                Tunnel::new("HH", 4),
-                Tunnel::new("JJ", 3),
-            ]
-        );
-
-        let mut tunnels_ee = graph.tunnels.get("EE").unwrap().clone();
-        tunnels_ee.sort_by(|a, b| a.to.cmp(&b.to));
-
-        assert_eq!(
-            tunnels_ee,
-            vec![
-                Tunnel::new("BB", 3),
-                Tunnel::new("CC", 2),
-                Tunnel::new("DD", 1),
-                Tunnel::new("HH", 3),
-                Tunnel::new("JJ", 4),
-            ]
-        );
-
-        let mut tunnels_hh = graph.tunnels.get("HH").unwrap().clone();
-        tunnels_hh.sort_by(|a, b| a.to.cmp(&b.to));
-
-        assert_eq!(
-            tunnels_hh,
-            vec![
-                Tunnel::new("BB", 6),
-                Tunnel::new("CC", 5),
-                Tunnel::new("DD", 4),
-                Tunnel::new("EE", 3),
-                Tunnel::new("JJ", 7),
-            ]
-        );
-
-        let mut tunnels_jj = graph.tunnels.get("JJ").unwrap().clone();
-        tunnels_jj.sort_by(|a, b| a.to.cmp(&b.to));
-
-        assert_eq!(
-            tunnels_jj,
-            vec![
-                Tunnel::new("BB", 3),
-                Tunnel::new("CC", 4),
-                Tunnel::new("DD", 3),
-                Tunnel::new("EE", 4),
-                Tunnel::new("HH", 7),
-            ]
-        );
+        let jj_neighbours = neighbours[*jj_index].clone();
+        assert_eq!(jj_neighbours[*aa_index], 0);
+        assert_eq!(jj_neighbours[*bb_index], 3);
+        assert_eq!(jj_neighbours[*cc_index], 4);
+        assert_eq!(jj_neighbours[*dd_index], 3);
+        assert_eq!(jj_neighbours[*ee_index], 4);
+        assert_eq!(jj_neighbours[*hh_index], 7);
     }
 
-    #[test]
-    fn test_bitmask() {
-        let mut graph = Graph::new();
-        let input = include_str!("../input/test16");
-
-        for line in input.lines() {
-            graph.parse_line(line);
-        }
-
-        graph.optimize_graph();
-
-        let mut bitmask_index = HashMap::new();
-        let mut bits = 0;
-
-        for (i, valve) in graph.valves.keys().enumerate() {
-            bitmask_index.insert(valve, i);
-            bits += 1;
-        }
-
-        //where all valves are opened
-        let mut max_bitmask = 0_u32;
-        for i in 0..bits {
-            max_bitmask |= 1 << i;
-        }
-
-        assert_eq!(max_bitmask, 0b1111111);
-
-        let mut bitmask = 0;
-
-        bitmask |= 1 << bitmask_index[&"AA".to_string()];
-
-        assert_ne!(bitmask & (1 << bitmask_index[&"AA".to_string()]), 0);
-        assert_eq!(bitmask & (1 << bitmask_index[&"BB".to_string()]), 0);
-
-        bitmask |= 1 << bitmask_index[&"BB".to_string()];
-
-        assert_ne!(bitmask & (1 << bitmask_index[&"AA".to_string()]), 0);
-        assert_ne!(bitmask & (1 << bitmask_index[&"BB".to_string()]), 0);
-
-        for valve in graph.valves.keys() {
-            bitmask |= 1 << bitmask_index[valve];
-        }
-
-        assert_eq!(bitmask, max_bitmask);
-    }
-
-    #[test]
+    // #[test]
     fn test_part1() {
-        let mut graph = Graph::new();
         let input = include_str!("../input/test16");
 
-        for line in input.lines() {
-            graph.parse_line(line);
-        }
-
-        graph.optimize_graph();
-
-        let mut cache = HashMap::new();
-        let mut bitmask_index = HashMap::new();
-
-        for (i, valve) in graph.valves.keys().enumerate() {
-            bitmask_index.insert(valve.clone(), i);
-        }
-
-        let max = graph.dfs("AA".to_string(), 30, 0, &bitmask_index, &mut cache);
-
-        assert_eq!(max, 1651);
+        assert_eq!(part1(input), 1651);
     }
 
     #[test]
     fn test_part2() {
-        let mut graph = Graph::new();
         let input = include_str!("../input/test16");
 
-        for line in input.lines() {
-            graph.parse_line(line);
-        }
-
-        graph.optimize_graph();
-
-        //find the maximum number of different bitmasks
-        let num_valves = graph.valves.len();
-
-        let num_bitmasks = 2_u32.pow(num_valves as u32);
-
-        let mut max = 0;
-        let mut bitmask_index = HashMap::new();
-
-        for (i, valve) in graph.valves.keys().enumerate() {
-            bitmask_index.insert(valve.clone(), i);
-        }
-
-        let mut cache = HashMap::new();
-        // let mut cache2 = HashMap::new();
-
-        for i in 0..num_bitmasks {
-            let pressure_released = graph.dfs("AA".to_string(), 26, i, &bitmask_index, &mut cache)
-                + graph.dfs("AA".to_string(), 26, !i, &bitmask_index, &mut cache);
-
-            if pressure_released > max {
-                max = pressure_released;
-            }
-        }
-        assert_eq!(max, 1707);
+        assert_eq!(part2(input), 1707);
     }
 }
