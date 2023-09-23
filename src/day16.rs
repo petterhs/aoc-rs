@@ -235,10 +235,13 @@ fn part1(input: &str) -> i32 {
         &valves,
         &neigbour_shortest_dist,
         30,
-        0,
+        1 << start_index,
         &mut cache,
     );
     println!("Time: {}", start.elapsed().as_millis());
+
+    let (valve_index, time_left, max_opened_valves_bitmask) = cache.iter().max().unwrap().0;
+    println!("opened_valves_bitmask: {:b}", max_opened_valves_bitmask);
     max
 }
 
@@ -261,43 +264,59 @@ fn part2(input: &str) -> i32 {
     let mut max = 0;
 
     let mut cache = HashMap::new();
+    // let mut cache2 = HashMap::new();
+    let _ = graph.dfs(
+        start_index,
+        &valves,
+        &neighbours_shortest_dist,
+        26,
+        0,
+        &mut cache,
+    );
     let mut cache2 = HashMap::new();
+    // let mut cache2 = HashMap::new();
+    let _ = graph.dfs(
+        start_index,
+        &valves,
+        &neighbours_shortest_dist,
+        26,
+        0,
+        &mut cache2,
+    );
 
-    for i in 0..num_bitmasks {
-        let pressure_released = graph.dfs(
-            start_index,
-            &valves,
-            &neighbours_shortest_dist,
-            26,
-            i,
-            &mut cache,
-        ) + graph.dfs(
-            start_index,
-            &valves,
-            &neighbours_shortest_dist,
-            26,
-            !i,
-            &mut cache2,
-        );
-        if pressure_released > max {
-            println!("i: {}, pressure_released: {}", i, pressure_released);
-            max = pressure_released;
+    let aa_index = graph.valve_index.get("AA").unwrap();
+
+    // let mut cache2 = cache.clone();
+    for ((_, _, bitmask), my_pressure_released) in &cache {
+        for ((_, _, bitmask2), elephant_pressure_released) in &cache {
+            if bitmask & bitmask2 == 0 {
+                println!("bitmask: {:b}", bitmask);
+                println!("bitmask2: {:b}", bitmask2);
+                println!("AND: {:b}", bitmask & bitmask2);
+                println!(
+                    "Released: {}",
+                    my_pressure_released + elephant_pressure_released
+                );
+
+                max = max.max(my_pressure_released + elephant_pressure_released);
+            }
         }
     }
+    println!("aa_index: {}: {:b}", aa_index, 1 << aa_index);
 
     max
 }
 
 pub fn run() {
     println!("Day 16");
-    let input = include_str!("../input/16");
+    let input = include_str!("../input/test16");
 
     let start = Instant::now();
     println!("Part1: {}", part1(input));
     println!("Time: {}", start.elapsed().as_millis());
 
     let start = Instant::now();
-    println!("Part!: {}", part2(input));
+    println!("Part2: {}", part2(input));
     println!("Time: {}", start.elapsed().as_millis());
 }
 
