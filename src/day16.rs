@@ -212,6 +212,7 @@ impl Graph {
                 ) + pressure_released,
             );
         }
+        // println!("bitmask: {:b}", opened_valves_bitmask);
         cache.insert((valve_index, time_left, opened_valves_bitmask), max);
         return max;
     }
@@ -235,7 +236,7 @@ fn part1(input: &str) -> i32 {
         &valves,
         &neigbour_shortest_dist,
         30,
-        1 << start_index,
+        1 << (start_index),
         &mut cache,
     );
     println!("Time: {}", start.elapsed().as_millis());
@@ -273,36 +274,31 @@ fn part2(input: &str) -> i32 {
         0,
         &mut cache,
     );
-    let mut cache2 = HashMap::new();
-    // let mut cache2 = HashMap::new();
-    let _ = graph.dfs(
-        start_index,
-        &valves,
-        &neighbours_shortest_dist,
-        26,
-        0,
-        &mut cache2,
-    );
 
-    let aa_index = graph.valve_index.get("AA").unwrap();
-
+    let bitmask_max = (1 << valves.len()) - 1;
+    println!("bitmask_max: {:b}", bitmask_max);
     // let mut cache2 = cache.clone();
     for ((_, _, bitmask), my_pressure_released) in &cache {
         for ((_, _, bitmask2), elephant_pressure_released) in &cache {
-            if bitmask & bitmask2 == 0 {
-                println!("bitmask: {:b}", bitmask);
-                println!("bitmask2: {:b}", bitmask2);
-                println!("AND: {:b}", bitmask & bitmask2);
-                println!(
-                    "Released: {}",
-                    my_pressure_released + elephant_pressure_released
-                );
+            if (bitmask ^ bitmask_max) & (bitmask2 ^ bitmask_max) == 0 {
+                if my_pressure_released + elephant_pressure_released > max {
+                    println!("bitmask: {:b}", bitmask ^ bitmask_max);
+                    println!("bitmask2: {:b}", bitmask2 ^ bitmask_max);
+                    println!("AND: {:b}", bitmask & bitmask2);
+                    println!("my_pressure_released: {}", my_pressure_released);
+                    println!("elephant_pressure_released: {}", elephant_pressure_released);
+                    println!(
+                        "Released: {}",
+                        my_pressure_released + elephant_pressure_released
+                    );
+                }
 
                 max = max.max(my_pressure_released + elephant_pressure_released);
             }
         }
     }
-    println!("aa_index: {}: {:b}", aa_index, 1 << aa_index);
+    println!("Valves: {:?}", valves);
+    println!("aa_index: {}: {:b}", start_index, 1 << start_index);
 
     max
 }
