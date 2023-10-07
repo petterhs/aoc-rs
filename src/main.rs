@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(slice_first_last_chunk)]
 mod day1;
 mod day10;
 mod day11;

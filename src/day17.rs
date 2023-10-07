@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 #[derive(Debug, PartialEq)]
 enum Direction {
@@ -45,7 +45,7 @@ impl JetStream {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Hash, Eq, Clone)]
 enum Rock {
     Horizontal,
     Plus,
@@ -123,16 +123,21 @@ impl Rocks {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 enum ChamberPos {
     Air,
     Rock,
 }
 
+#[derive(Eq, PartialEq, Hash)]
+struct Cache(usize, Rock, [Vec<ChamberPos>; 12]);
+
 struct Chamber {
     height: usize,
     width: usize,
     chamber: Vec<Vec<ChamberPos>>,
+    rocks_dropped: u64,
+    repeating_sequence: Option<(usize, u64)>,
 }
 
 impl Chamber {
@@ -151,6 +156,8 @@ impl Chamber {
             height,
             width,
             chamber,
+            repeating_sequence: None,
+            rocks_dropped: 0,
         }
     }
 
@@ -173,9 +180,9 @@ impl Chamber {
 
     fn valid_move(&self, rock: &Rock, height: usize, pos: usize, direction: &Direction) -> bool {
         let r = rock.get();
-        println!("height: {:?}, pos: {:?}", height, pos);
-        println!("rock: {:?}", r);
-        println!("direction: {:?}", direction);
+        // println!("height: {:?}, pos: {:?}", height, pos);
+        // println!("rock: {:?}", r);
+        // println!("direction: {:?}", direction);
 
         let (dy, dx): (i32, i32) = match direction {
             Direction::Left => (0, -1),
@@ -193,7 +200,7 @@ impl Chamber {
                 match (x, y) {
                     (Some(x), Some(y)) => {
                         if x >= self.width || y == 0 {
-                            println!("OUTSIDE");
+                            // println!("OUTSIDE");
                             return false;
                         }
 
@@ -201,7 +208,7 @@ impl Chamber {
                             && *element == 1
                             && self.chamber[y - 1][x] == ChamberPos::Rock
                         {
-                            println!("BONK");
+                            // println!("BONK");
                             return false;
                         }
                     }
@@ -209,16 +216,25 @@ impl Chamber {
                 }
             }
         }
-        println!("Valid move\n");
+        // println!("Valid move\n");
         true
     }
 
-    fn drop_rock(&mut self, rock: &Rock, pos: usize, jetstream: Option<&mut JetStream>) {
+    fn drop_rock(
+        &mut self,
+        rock: &Rock,
+        pos: usize,
+        jetstream: Option<&mut JetStream>,
+        cache: &mut HashMap<Cache, (usize, u64)>,
+    ) {
+        let mut binding = JetStream::new("");
+        let stream = jetstream.unwrap_or(&mut binding);
+
         let height = self.height;
         let mut pos = pos;
 
         for (h, _) in self.chamber.iter().rev().enumerate() {
-            if let Some(&mut ref mut stream) = jetstream {
+            if stream.jet_stream.len() > 0 {
                 let direction = stream.next();
                 if self.valid_move(rock, height - h, pos, direction) {
                     match direction {
@@ -231,8 +247,25 @@ impl Chamber {
 
             let valid_move = self.valid_move(rock, height - h, pos, &Direction::Down);
             if !valid_move {
-                println!("Hit bottom");
+                // println!("Hit bottom");
                 self.insert_rock(&rock, pos, height - h - 1);
+                let top_12_rows = self.chamber.last_chunk::<12>();
+
+                match top_12_rows {
+                    None => return,
+                    Some(top_12_rows) => {
+                        let mem = Cache(stream.position, rock.clone(), top_12_rows.clone());
+
+                        if let Some((start_height, start_rocks_dropped)) = cache.get(&mem) {
+                            let rocks = self.rocks_dropped - start_rocks_dropped;
+                            let end_height = self.height;
+                            self.repeating_sequence = Some((end_height - *start_height, rocks));
+                        }
+
+                        cache.insert(mem, (self.height, self.rocks_dropped));
+                    }
+                }
+
                 return;
             }
         }
@@ -241,7 +274,7 @@ impl Chamber {
     }
 
     fn insert_rock(&mut self, rock: &Rock, pos: usize, height: usize) {
-        println!("Inserting at height: {:?}, pos: {:?}", height, pos);
+        // println!("Inserting at height: {:?}, pos:  {:?}", height, pos);
         match rock {
             Rock::Horizontal => {
                 self.chamber[height][pos] = ChamberPos::Rock;
@@ -278,7 +311,8 @@ impl Chamber {
         }
 
         self.increase_height(height + rock.height() + 4);
-        println!("{}", self);
+        self.rocks_dropped += 1;
+        // println!("{}", self);
     }
 }
 
@@ -305,15 +339,47 @@ fn part1(input: &str) -> usize {
 
     let mut chamber = Chamber::new(7, 4);
 
+    let mut cache = HashMap::new();
     for _ in 0..2022 {
-        chamber.drop_rock(rocks.next(), 2, Some(&mut jet_stream));
+        chamber.drop_rock(rocks.next(), 2, Some(&mut jet_stream), &mut cache);
     }
 
     chamber.height - 4
 }
 
-fn part2(input: &str) -> usize {
-    0
+fn part2(input: &str) -> u64 {
+    let mut jet_stream = JetStream::new(input);
+    let mut rocks = Rocks::new();
+
+    let mut chamber = Chamber::new(7, 4);
+
+    let mut cache = HashMap::new();
+
+    let mut cycle = None;
+    for _ in 0..3000 {
+        chamber.drop_rock(rocks.next(), 2, Some(&mut jet_stream), &mut cache);
+
+        if let Some(sequence) = chamber.repeating_sequence {
+            println!("Cycle found.");
+            cycle = Some(sequence);
+            break;
+        }
+    }
+    let rocks_dropped = chamber.rocks_dropped;
+    let mut height = 0;
+
+    if let Some((d_height, d_rocks)) = cycle {
+        let num_cycles = (1000000000000 - rocks_dropped) / d_rocks;
+
+        height += (d_height) as u64 * num_cycles;
+
+        chamber.rocks_dropped += d_rocks * num_cycles;
+        while chamber.rocks_dropped < 1000000000000 {
+            chamber.drop_rock(rocks.next(), 2, Some(&mut jet_stream), &mut cache);
+        }
+    }
+
+    chamber.height as u64 - 4 + height
 }
 
 pub fn run() {
@@ -352,48 +418,50 @@ mod tests {
 
     #[test]
     fn test_drop_rock() {
-        let mut chamber = Chamber::new(7, 4);
+        let mut chamber = Chamber::new(7, 12);
+        let mut cache = HashMap::new();
         println!("{}", chamber);
 
         println!("Drop rock: {:?}", Rock::Horizontal);
-        chamber.drop_rock(&Rock::Horizontal, 2, None);
+        chamber.drop_rock(&Rock::Horizontal, 2, None, &mut cache);
         println!("{}", chamber);
 
         println!("Drop rock: {:?}", Rock::Plus);
-        chamber.drop_rock(&Rock::Plus, 2, None);
+        chamber.drop_rock(&Rock::Plus, 2, None, &mut cache);
         println!("{}", chamber);
 
-        assert_eq!(chamber.height, 8);
+        assert_eq!(chamber.height, 12);
 
         println!("Drop rock: {:?}", Rock::ReverseL);
-        chamber.drop_rock(&Rock::ReverseL, 2, None);
+        chamber.drop_rock(&Rock::ReverseL, 2, None, &mut cache);
         println!("{}", chamber);
-        assert_eq!(chamber.height, 11);
+        assert_eq!(chamber.height, 12);
 
         println!("Drop rock: {:?}", Rock::Vertical);
-        chamber.drop_rock(&Rock::Vertical, 2, None);
+        chamber.drop_rock(&Rock::Vertical, 2, None, &mut cache);
         println!("{}", chamber);
         assert_eq!(chamber.height, 13);
 
         println!("Drop rock: {:?}", Rock::Square);
-        chamber.drop_rock(&Rock::Square, 2, None);
+        chamber.drop_rock(&Rock::Square, 2, None, &mut cache);
         println!("{}", chamber);
         assert_eq!(chamber.height, 15);
     }
     #[test]
     fn test_drop_rock_2() {
-        let mut chamber = Chamber::new(7, 4);
+        let mut chamber = Chamber::new(7, 12);
+        let mut cache = HashMap::new();
         println!("{}", chamber);
 
         println!("Drop rock: {:?}", Rock::Vertical);
-        chamber.drop_rock(&Rock::Vertical, 2, None);
+        chamber.drop_rock(&Rock::Vertical, 2, None, &mut cache);
         println!("{}", chamber);
 
         println!("Drop rock: {:?}", Rock::Plus);
-        chamber.drop_rock(&Rock::Plus, 0, None);
+        chamber.drop_rock(&Rock::Plus, 0, None, &mut cache);
         println!("{}", chamber);
 
-        assert_eq!(chamber.height, 10);
+        assert_eq!(chamber.height, 12);
     }
     #[test]
     fn test_part1() {
