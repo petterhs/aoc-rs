@@ -124,6 +124,14 @@ impl Blueprint {
             return inventory.geode + robots.geode;
         }
 
+        if potential_material(time, inventory.geode, robots.geode) <= current_max {
+            return 0;
+        }
+
+        if potential_material(time, inventory.obsidian, robots.obsidian) <= self.geode_cost.1 {
+            return inventory.geode + robots.geode * time;
+        }
+
         if inventory.ore >= self.geode_cost.0 && inventory.obsidian >= self.geode_cost.1 {
             return self.max_geode(
                 time - 1,
@@ -135,9 +143,6 @@ impl Blueprint {
         }
 
         let mut geodes = current_max;
-        if potential_geodes(time, inventory.geode, robots.geode) <= current_max {
-            return 0;
-        }
 
         let after_empty = after_empty.unwrap_or(vec![0; 3]);
 
@@ -227,14 +232,8 @@ fn part1(input: &str) -> usize {
 
     return sum_quality;
 }
-fn potential_geodes(time_left: usize, geodes: usize, robots: usize) -> usize {
-    let mut geodes = geodes + time_left * robots;
-
-    for time in 0..(time_left - 1) {
-        let g = time * (time + 1) / 2;
-        geodes += g;
-    }
-    return geodes;
+fn potential_material(time_left: usize, material_inventory: usize, robots: usize) -> usize {
+    return material_inventory + time_left * robots + time_left * (time_left - 1) / 2;
 }
 
 fn part2(input: &str) -> usize {
