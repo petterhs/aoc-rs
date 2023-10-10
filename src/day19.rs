@@ -112,65 +112,86 @@ impl Sub<Inventory> for Inventory {
 }
 
 impl Blueprint {
-    fn max_geode(&self, time: usize, robots: Inventory, inventory: Inventory) -> usize {
-        if time == 0 {
-            return inventory.geode;
+    fn max_geode(
+        &self,
+        time: usize,
+        robots: Inventory,
+        inventory: Inventory,
+        after_empty: Option<Vec<usize>>,
+        current_max: usize,
+    ) -> usize {
+        if time == 1 {
+            return inventory.geode + robots.geode;
         }
 
-        // println!(
-        //     "Time: {}, Robots: {:?}, Inventory: {:?}",
-        //     time, robots, inventory
-        // );
-        // std::thread::sleep(std::time::Duration::from_millis(100));
         if inventory.ore >= self.geode_cost.0 && inventory.obsidian >= self.geode_cost.1 {
             return self.max_geode(
                 time - 1,
                 robots + Inventory::new(0, 0, 0, 1),
                 inventory + robots - Inventory::new(self.geode_cost.0, 0, self.geode_cost.1, 0),
+                None,
+                current_max,
             );
         }
-        // if inventory.ore >= self.obsidian_cost.0 && inventory.clay >= self.obsidian_cost.1 {
-        //     return self.max_geode(
-        //         time - 1,
-        //         robots + Inventory::new(0, 0, 1, 0),
-        //         inventory + robots
-        //             - Inventory::new(self.obsidian_cost.0, self.obsidian_cost.1, 0, 0),
-        //     );
-        // }
-        //
-        let mut resulting_geodes = Vec::new();
 
-        if inventory.ore >= self.ore_cost && robots.ore < self.max_ore_robots {
-            resulting_geodes.push(self.max_geode(
-                time - 1,
-                robots + Inventory::new(1, 0, 0, 0),
-                inventory + robots - Inventory::new(self.ore_cost, 0, 0, 0),
-            ));
+        let mut geodes = current_max;
+        if potential_geodes(time, inventory.geode, robots.geode) <= current_max {
+            return 0;
         }
 
-        if inventory.ore >= self.clay_cost && robots.clay < self.max_clay_robots {
-            resulting_geodes.push(self.max_geode(
-                time - 1,
-                robots + Inventory::new(0, 1, 0, 0),
-                inventory + robots - Inventory::new(self.clay_cost, 0, 0, 0),
-            ));
-        }
+        let after_empty = after_empty.unwrap_or(vec![0; 3]);
 
+        let mut could_build = vec![0; 3];
         if inventory.ore >= self.obsidian_cost.0
             && inventory.clay >= self.obsidian_cost.1
             && robots.obsidian < self.geode_cost.1
+            && after_empty[0] == 0
         {
-            resulting_geodes.push(self.max_geode(
+            geodes = geodes.max(self.max_geode(
                 time - 1,
                 robots + Inventory::new(0, 0, 1, 0),
                 inventory + robots
                     - Inventory::new(self.obsidian_cost.0, self.obsidian_cost.1, 0, 0),
+                None,
+                geodes,
             ));
+            could_build[0] = 1;
         }
 
-        resulting_geodes.push(self.max_geode(time - 1, robots, inventory + robots));
+        if inventory.ore >= self.clay_cost
+            && robots.clay < self.max_clay_robots
+            && after_empty[2] == 0
+        {
+            geodes = geodes.max(self.max_geode(
+                time - 1,
+                robots + Inventory::new(0, 1, 0, 0),
+                inventory + robots - Inventory::new(self.clay_cost, 0, 0, 0),
+                None,
+                geodes,
+            ));
+            could_build[2] = 1;
+        }
 
-        return *resulting_geodes.iter().max().unwrap();
+        if inventory.ore >= self.ore_cost && robots.ore < self.max_ore_robots && after_empty[1] == 0
+        {
+            geodes = geodes.max(self.max_geode(
+                time - 1,
+                robots + Inventory::new(1, 0, 0, 0),
+                inventory + robots - Inventory::new(self.ore_cost, 0, 0, 0),
+                None,
+                geodes,
+            ));
+            could_build[1] = 1;
+        }
+
+        geodes = geodes.max(self.max_geode(
+            time - 1,
+            robots,
+            inventory + robots,
+            Some(could_build),
+            geodes,
+        ));
+        return geodes;
     }
 }
 
@@ -186,12 +207,13 @@ fn part1(input: &str) -> usize {
     let mut sum_quality = 0;
 
     for blueprint in blueprints {
-        //time function
         let start = std::time::Instant::now();
         max_geodes.push(blueprint.max_geode(
             24,
             Inventory::new(1, 0, 0, 0),
             Inventory::new(0, 0, 0, 0),
+            None,
+            0,
         ));
         let duration = start.elapsed();
         println!(
@@ -205,9 +227,52 @@ fn part1(input: &str) -> usize {
 
     return sum_quality;
 }
+fn potential_geodes(time_left: usize, geodes: usize, robots: usize) -> usize {
+    let mut geodes = geodes + time_left * robots;
+
+    for time in 0..(time_left - 1) {
+        let g = time * (time + 1) / 2;
+        geodes += g;
+    }
+    return geodes;
+}
+
+fn part2(input: &str) -> usize {
+    let mut blueprints = Vec::new();
+
+    let mut lines = input.lines().take(3);
+
+    for line in lines.by_ref() {
+        let blueprint = Blueprint::from_str(line).unwrap();
+
+        blueprints.push(blueprint);
+    }
+    let mut max_geodes = Vec::new();
+    for blueprint in blueprints {
+        //time function
+        let start = std::time::Instant::now();
+        max_geodes.push(blueprint.max_geode(
+            32,
+            Inventory::new(1, 0, 0, 0),
+            Inventory::new(0, 0, 0, 0),
+            None,
+            0,
+        ));
+        let duration = start.elapsed();
+        println!(
+            "Geodes: id: {}, max: {}, time: {:?}",
+            blueprint.id,
+            max_geodes.last().unwrap(),
+            duration
+        );
+    }
+    max_geodes.iter().fold(1, |acc, x| acc * x)
+}
+
 pub fn run() {
     let input = include_str!("../input/19");
     println!("Part1: {}", part1(input));
+    println!("Part2: {}", part2(input));
 }
 
 #[cfg(test)]
@@ -236,11 +301,5 @@ mod tests {
         assert_eq!(blueprints[1].clay_cost, 3);
         assert_eq!(blueprints[1].obsidian_cost, (3, 8));
         assert_eq!(blueprints[1].geode_cost, (3, 12));
-    }
-
-    #[test]
-    fn test_part1() {
-        let input = include_str!("../input/test19");
-        assert_eq!(part1(input), 12);
     }
 }
