@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![feature(slice_first_last_chunk)]
+#![feature(linked_list_remove)]
 mod day1;
 mod day10;
 mod day11;
@@ -12,6 +13,7 @@ mod day17;
 mod day18;
 mod day19;
 mod day2;
+mod day20;
 mod day3;
 mod day4;
 mod day5;
@@ -38,5 +40,6 @@ fn main() {
     // day16::run();
     // day17::run();
     // day18::run();
-    day19::run();
+    // day19::run();
+    day20::run();
 }
