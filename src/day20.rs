@@ -3,11 +3,11 @@ use std::{collections::LinkedList, fmt::Display, str::FromStr};
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Item {
     index: usize,
-    value: i32,
+    value: i64,
 }
 
 impl Item {
-    fn new(index: usize, value: i32) -> Item {
+    fn new(index: usize, value: i64) -> Item {
         Item { index, value }
     }
 }
@@ -24,7 +24,7 @@ impl ItemList {
         }
     }
 
-    fn add(&mut self, index: usize, value: i32) {
+    fn add(&mut self, index: usize, value: i64) {
         self.items.push_back(Item::new(index, value));
     }
 
@@ -50,15 +50,13 @@ impl ItemList {
 
     fn move_item(&mut self, item: &Item) {
         let index = self.find(item).unwrap();
-        let mut new_index = index as i32 + item.value;
+        let mut new_index = index as i64 + item.value;
 
-        new_index = new_index % (self.len() as i32 - 1);
+        new_index = new_index % (self.len() as i64 - 1);
 
         if new_index <= 0 {
-            new_index += self.len() as i32 - 1;
+            new_index += self.len() as i64 - 1;
         }
-
-        println!("{} {} moves to index {}", item.value, index, new_index);
 
         let item = self.items.remove(index);
 
@@ -91,7 +89,7 @@ impl Display for ItemList {
     }
 }
 
-fn part1(input: &str) -> i32 {
+fn part1(input: &str) -> i64 {
     let list = input.parse::<ItemList>().unwrap();
 
     let mut modified_list = list.clone();
@@ -107,19 +105,37 @@ fn part1(input: &str) -> i32 {
         .position(|i| i.value == 0)
         .unwrap();
 
-    println!("index0: {}", index0);
-
-    println!("1000: {}", modified_list.at(index0 + 1000).unwrap().value);
-    println!("2000: {}", modified_list.at(index0 + 2000).unwrap().value);
-    println!("3000: {}", modified_list.at(index0 + 3000).unwrap().value);
-
     modified_list.at(index0 + 1000).unwrap().value
         + modified_list.at(index0 + 2000).unwrap().value
         + modified_list.at(index0 + 3000).unwrap().value
 }
 
-fn part2(input: &str) -> usize {
-    0
+fn part2(input: &str) -> i64 {
+    let mut list = input.parse::<ItemList>().unwrap();
+
+    let key = 811589153;
+
+    for i in list.items.iter_mut() {
+        i.value *= key;
+    }
+
+    let mut modified_list = list.clone();
+    for _ in 0..10 {
+        for i in 0..list.len() {
+            let item = list.at(i).unwrap();
+            modified_list.move_item(item);
+        }
+    }
+
+    let index0 = modified_list
+        .items
+        .iter()
+        .position(|i| i.value == 0)
+        .unwrap();
+
+    modified_list.at(index0 + 1000).unwrap().value
+        + modified_list.at(index0 + 2000).unwrap().value
+        + modified_list.at(index0 + 3000).unwrap().value
 }
 
 pub fn run() {
