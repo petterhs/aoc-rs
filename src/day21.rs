@@ -84,6 +84,36 @@ fn number(monkeys: &HashMap<String, Monkey>, name: String) -> i64 {
     }
 }
 
+fn path_to_humn(monkeys: &HashMap<String, Monkey>, name: String, path: Vec<u8>) -> Option<Vec<u8>> {
+    //Depth first search to find the path
+
+    if name == "humn" {
+        return Some(path);
+    }
+
+    let monkey = monkeys.get(&name).unwrap();
+
+    let mut path = path.clone();
+
+    match monkey.number {
+        Action::Number(_) => None,
+        Action::Op(ref op) => {
+            let mut path1 = path.clone();
+            path.push(0);
+            path1.push(1);
+            if let Some(path) = path_to_humn(monkeys, op.lhs.clone(), path) {
+                return Some(path);
+            }
+
+            if let Some(path) = path_to_humn(monkeys, op.rhs.clone(), path1) {
+                return Some(path);
+            }
+
+            None
+        }
+    }
+}
+
 fn part1() -> i64 {
     let input = include_str!("../input/21");
 
@@ -91,15 +121,94 @@ fn part1() -> i64 {
 
     for line in input.lines() {
         let monkey = line.parse::<Monkey>().unwrap();
-        println!("{:?}", monkey);
+        // println!("{:?}", monkey);
         monkeys.insert(monkey.name.clone(), monkey);
     }
 
     number(&monkeys, "root".to_string())
 }
 
+fn part2() -> i64 {
+    let input = include_str!("../input/21");
+
+    let mut monkeys = HashMap::new();
+
+    for line in input.lines() {
+        let monkey = line.parse::<Monkey>().unwrap();
+
+        monkeys.insert(monkey.name.clone(), monkey);
+    }
+
+    let path = path_to_humn(&monkeys, "root".to_string(), Vec::new()).unwrap();
+
+    let root = monkeys.get("root").unwrap();
+    let mut next;
+    let mut goal_number = match root.number {
+        Action::Number(_) => panic!("root is number"),
+        Action::Op(ref op) => match path[0] {
+            0 => {
+                next = op.lhs.clone();
+                number(&monkeys, op.rhs.clone())
+            }
+            1 => {
+                next = op.rhs.clone();
+                number(&monkeys, op.lhs.clone())
+            }
+            _ => panic!("unknown path"),
+        },
+    };
+
+    for i in path.iter().skip(1) {
+        let monkey = monkeys.get(&next).unwrap();
+        match monkey.number {
+            Action::Number(_) => panic!("root is number"),
+            Action::Op(ref op) => match *i {
+                0 => {
+                    next = op.lhs.clone();
+                    match op.op {
+                        Operation::Add => goal_number -= number(&monkeys, op.rhs.clone()),
+                        Operation::Sub => goal_number += number(&monkeys, op.rhs.clone()),
+                        Operation::Mul => goal_number /= number(&monkeys, op.rhs.clone()),
+                        Operation::Devide => goal_number *= number(&monkeys, op.rhs.clone()),
+                    }
+                }
+                1 => {
+                    next = op.rhs.clone();
+                    match op.op {
+                        Operation::Add => goal_number -= number(&monkeys, op.lhs.clone()),
+                        Operation::Sub => {
+                            goal_number = number(&monkeys, op.lhs.clone()) - goal_number
+                        }
+                        Operation::Mul => goal_number /= number(&monkeys, op.lhs.clone()),
+                        Operation::Devide => goal_number *= number(&monkeys, op.lhs.clone()),
+                    }
+                }
+                _ => panic!("unknown path"),
+            },
+        }
+    }
+
+    let humn = monkeys.get_mut("humn").unwrap();
+    match humn.number {
+        Action::Number(ref mut n) => *n = goal_number,
+        Action::Op(_) => panic!("humn is op"),
+    }
+
+    let root = monkeys.get_mut("root").unwrap();
+
+    match root.number {
+        Action::Number(_) => panic!("root is number"),
+        Action::Op(ref mut op) => op.op = Operation::Sub,
+    }
+
+    assert_eq!(0, number(&monkeys, "root".to_string()));
+
+    goal_number
+}
+
 pub fn run() {
     println!("day21");
 
     println!("part1: {}", part1());
+    println!("part2: {}", part2());
 }
