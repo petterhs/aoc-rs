@@ -86,14 +86,11 @@ fn part1() -> i32 {
     let input = include_str!("../input/23");
     let mut elves = Elves::from_str(input).unwrap();
 
-    println!("{}", elves);
-
     let mut direction = Direction::N;
-    for _ in 0..10 {
-        // println!("{:?}", direction);
+    let mut round = 1;
+    loop {
         let mut new_pos = HashMap::new();
         for elf in elves.0.iter() {
-            // println!("\nPos:{:?}", elf);
             if !(elves.0.contains(&(elf.0, elf.1 - 1))
                 || elves.0.contains(&(elf.0 - 1, elf.1 - 1))
                 || elves.0.contains(&(elf.0 + 1, elf.1 - 1))
@@ -108,7 +105,6 @@ fn part1() -> i32 {
 
             let mut current_direction = direction.clone();
             for _ in 0..4 {
-                // println!("{:?}", current_direction);
                 match current_direction {
                     Direction::N => {
                         if !(elves.0.contains(&(elf.0, elf.1 - 1))
@@ -120,10 +116,6 @@ fn part1() -> i32 {
                         }
                     }
                     Direction::S => {
-                        // println!("TEST");
-                        // println!("{:?}", elves.0.contains(&(elf.0, elf.1 + 1)));
-                        // println!("{:?}", elves.0.contains(&(elf.0 - 1, elf.1 + 1)));
-                        // println!("{:?}", elves.0.contains(&(elf.0 + 1, elf.1 + 1)));
                         if !(elves.0.contains(&(elf.0, elf.1 + 1))
                             || elves.0.contains(&(elf.0 - 1, elf.1 + 1))
                             || elves.0.contains(&(elf.0 + 1, elf.1 + 1)))
@@ -156,11 +148,14 @@ fn part1() -> i32 {
         }
         direction = direction.next();
 
-        // if new_pos.is_empty() {
-        //     break;
-        // }
+        if round == 10 {
+            println!("Part1: {}", elves.num_empty_pos());
+        }
 
-        // println!("{:?}", new_pos);
+        if new_pos.is_empty() {
+            return round;
+        }
+        round += 1;
 
         let mut non_dup = HashSet::new();
 
@@ -180,17 +175,10 @@ fn part1() -> i32 {
             if !non_dup.contains(&pos) {
                 continue;
             }
-            // println!("{:?} -> {:?}", elf, pos);
             elves.0.remove(&elf);
             elves.0.insert(pos);
         }
-
-        // println!("{}", elves);
     }
-
-    println!("{}", elves);
-
-    elves.num_empty_pos() as i32
 }
 
 pub fn run() {
