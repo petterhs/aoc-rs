@@ -140,8 +140,8 @@ fn parse_input(str: &str) -> (Valley, Vec<Blizzard>) {
     (Valley::new(start_pos, end_pos, width, height), blizzards)
 }
 
-fn shortest_path(valley: &Valley, blizzards: &[Blizzard]) -> usize {
-    let steps = 1;
+fn shortest_path(valley: &Valley, blizzards: &[Blizzard]) -> (usize, Vec<Blizzard>) {
+    let mut steps = 1;
     let mut blizzards = blizzards.to_vec();
 
     let mut queue = VecDeque::new();
@@ -150,8 +150,28 @@ fn shortest_path(valley: &Valley, blizzards: &[Blizzard]) -> usize {
     for b in blizzards.iter_mut() {
         b.step();
     }
+    while blizzards.iter().any(|b| b.pos == valley.start_pos) {
+        display_valley(&valley.start_pos, &valley, &blizzards);
+        println!("Wait to move into start pos");
+        for b in blizzards.iter_mut() {
+            b.step();
+        }
+        steps += 1;
+    }
     let path: Vec<Pos> = Vec::new();
-    queue.push_back((valley.start_pos, blizzards, steps, path));
+    queue.push_back((valley.start_pos, blizzards.clone(), steps, path.clone()));
+    println!("Start pos: {:?}", valley.start_pos);
+
+    // Add the possibility to wait up to 10 minutes before moving into the start pos
+    for _ in 0..10 {
+        for b in blizzards.iter_mut() {
+            b.step();
+        }
+        steps += 1;
+        if !blizzards.iter().any(|b| b.pos == valley.start_pos) {
+            queue.push_back((valley.start_pos, blizzards.clone(), steps, path.clone()));
+        }
+    }
 
     while let Some((pos, blizzards, steps, path)) = queue.pop_front() {
         let mut blizzards = blizzards.clone();
@@ -189,9 +209,13 @@ fn shortest_path(valley: &Valley, blizzards: &[Blizzard]) -> usize {
             .collect::<Vec<(usize, usize)>>();
 
         if new_pos.contains(&valley.end_pos) {
+            for b in blizzards.iter_mut() {
+                b.step();
+            }
+            display_valley(&pos, valley, &blizzards);
             println!("Found end");
             println!("Path: {:?}", path);
-            return steps + 2;
+            return (steps + 2, blizzards);
         }
 
         for pos in new_pos {
@@ -203,7 +227,7 @@ fn shortest_path(valley: &Valley, blizzards: &[Blizzard]) -> usize {
         cache.insert((pos, steps));
     }
 
-    0
+    (0, blizzards)
 }
 
 fn display_valley(pos: &Pos, valley: &Valley, blizzards: &[Blizzard]) {
@@ -233,6 +257,7 @@ fn display_valley(pos: &Pos, valley: &Valley, blizzards: &[Blizzard]) {
     for line in valley_grid {
         println!("{}", line.iter().collect::<String>());
     }
+    println!("");
 }
 
 fn part1() -> usize {
@@ -245,11 +270,44 @@ fn part1() -> usize {
 
     display_valley(&(0, 0), &valley, &blizzards);
 
-    shortest_path(&valley, &blizzards)
+    shortest_path(&valley, &blizzards).0
+}
+
+fn part2() -> usize {
+    let input = include_str!("../input/24");
+    // let input = include_str!("../input/test24_1");
+
+    let (mut valley, blizzards) = parse_input(input);
+
+    println!("{:?}", valley);
+    println!("{:?}", blizzards);
+
+    let mut total_steps = 0;
+    let start_pos = valley.start_pos;
+    let end_pos = valley.end_pos;
+
+    let (steps_to_goal, blizzards) = shortest_path(&valley, &blizzards);
+    total_steps += steps_to_goal;
+    println!("Steps to goal: {}", steps_to_goal);
+
+    valley.end_pos = start_pos;
+    valley.start_pos = end_pos;
+    let (steps_back, blizzards) = shortest_path(&valley, &blizzards);
+    total_steps += steps_back;
+    println!("Steps back: {}", steps_back);
+
+    valley.end_pos = end_pos;
+    valley.start_pos = start_pos;
+    let (steps_to_goal, _) = shortest_path(&valley, &blizzards);
+    total_steps += steps_to_goal;
+    println!("Steps to goal: {}", steps_to_goal);
+
+    total_steps
 }
 
 pub fn run() {
     println!("Part 1: {}", part1());
+    println!("Part 2: {}", part2());
 }
 
 #[cfg(test)]
@@ -273,6 +331,5 @@ mod tests {
             display_valley(&(0, 0), &valley, &blizzards);
             println!("");
         }
-        assert!(false);
     }
 }
