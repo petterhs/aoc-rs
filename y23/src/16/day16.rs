@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 struct Grid {
     grid: Vec<Vec<Tile>>,
@@ -8,6 +11,26 @@ impl Grid {
     fn valid_position(&self, position: (i32, i32)) -> bool {
         let (x, y) = position;
         x >= 0 && y >= 0 && x < self.grid[0].len() as i32 && y < self.grid.len() as i32
+    }
+
+    fn next_position(
+        &self,
+        position: (usize, usize),
+        direction: &Direction,
+    ) -> Option<(usize, usize)> {
+        let x = position.0 as i32;
+        let y = position.1 as i32;
+        let (x, y) = match direction {
+            Direction::Up => (x, y - 1),
+            Direction::Down => (x, y + 1),
+            Direction::Left => (x - 1, y),
+            Direction::Right => (x + 1, y),
+        };
+        if self.valid_position((x, y)) {
+            Some((x as usize, y as usize))
+        } else {
+            None
+        }
     }
 }
 
@@ -78,114 +101,130 @@ enum Direction {
 }
 
 impl Beam {
-    fn next_position(&self, grid: &Grid) -> Option<(usize, usize)> {
-        let x = self.position.0 as i32;
-        let y = self.position.1 as i32;
-        let (x, y) = match self.direction {
-            Direction::Up => (x, y - 1),
-            Direction::Down => (x, y + 1),
-            Direction::Left => (x - 1, y),
-            Direction::Right => (x + 1, y),
-        };
-        if grid.valid_position((x, y)) {
-            Some((x as usize, y as usize))
-        } else {
-            None
+    fn next_beams(&self, grid: &Grid) -> Option<Vec<Beam>> {
+        let mut beams = Vec::new();
+
+        match grid.grid[self.position.1][self.position.0] {
+            Tile::MirrorRight => {
+                let direction = match self.direction {
+                    Direction::Up => Direction::Right,
+                    Direction::Down => Direction::Left,
+                    Direction::Left => Direction::Down,
+                    Direction::Right => Direction::Up,
+                };
+                if let Some(pos) = grid.next_position(self.position, &direction) {
+                    beams.push(Beam {
+                        position: pos,
+                        direction,
+                    });
+                }
+            }
+            Tile::MirrorLeft => {
+                let direction = match self.direction {
+                    Direction::Up => Direction::Left,
+                    Direction::Down => Direction::Right,
+                    Direction::Left => Direction::Up,
+                    Direction::Right => Direction::Down,
+                };
+                if let Some(pos) = grid.next_position(self.position, &direction) {
+                    beams.push(Beam {
+                        position: pos,
+                        direction,
+                    });
+                }
+            }
+            Tile::SplitterHorizontal => match self.direction {
+                Direction::Up | Direction::Down => {
+                    if let Some(pos) = grid.next_position(self.position, &Direction::Left) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: Direction::Left,
+                        });
+                    }
+                    if let Some(pos) = grid.next_position(self.position, &Direction::Right) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: Direction::Right,
+                        });
+                    }
+                }
+                Direction::Left | Direction::Right => {
+                    if let Some(pos) = grid.next_position(self.position, &self.direction) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: self.direction.clone(),
+                        });
+                    }
+                }
+            },
+            Tile::SplitterVertical => match self.direction {
+                Direction::Left | Direction::Right => {
+                    if let Some(pos) = grid.next_position(self.position, &Direction::Up) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: Direction::Up,
+                        });
+                    }
+                    if let Some(pos) = grid.next_position(self.position, &Direction::Down) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: Direction::Down,
+                        });
+                    }
+                }
+                Direction::Up | Direction::Down => {
+                    if let Some(pos) = grid.next_position(self.position, &self.direction) {
+                        beams.push(Beam {
+                            position: pos,
+                            direction: self.direction.clone(),
+                        });
+                    }
+                }
+            },
+            Tile::Empty => {
+                if let Some(pos) = grid.next_position(self.position, &self.direction) {
+                    beams.push(Beam {
+                        position: pos,
+                        direction: self.direction.clone(),
+                    });
+                }
+            }
+            _ => {}
         }
+        Some(beams)
     }
 }
 
-fn part1(input: &str) -> u32 {
-    let grid = Grid::from(input);
-
-    println!("{}", grid);
-
-    let mut beams = vec![Beam {
-        position: (0, 0),
-        direction: match grid.grid[0][0] {
-            Tile::MirrorLeft | Tile::SplitterVertical => Direction::Down,
-            _ => Direction::Right,
-        },
-    }];
-
+fn energized_positions(grid: &Grid, beam: &Beam) -> HashSet<Beam> {
     let mut visited_beams = HashSet::new();
+
+    let mut beams = vec![beam.clone()];
 
     while let Some(beam) = beams.pop() {
         if visited_beams.contains(&beam) {
             continue;
         }
         visited_beams.insert(beam.clone());
-        match beam.next_position(&grid) {
-            Some(pos) => match grid.grid[pos.1][pos.0] {
-                Tile::Empty => {
-                    beams.push(Beam {
-                        position: pos,
-                        direction: beam.direction,
-                    });
-                }
-                Tile::MirrorRight => {
-                    beams.push(Beam {
-                        position: pos,
-                        direction: match beam.direction {
-                            Direction::Up => Direction::Right,
-                            Direction::Down => Direction::Left,
-                            Direction::Left => Direction::Down,
-                            Direction::Right => Direction::Up,
-                        },
-                    });
-                }
-                Tile::MirrorLeft => {
-                    beams.push(Beam {
-                        position: pos,
-                        direction: match beam.direction {
-                            Direction::Up => Direction::Left,
-                            Direction::Down => Direction::Right,
-                            Direction::Left => Direction::Up,
-                            Direction::Right => Direction::Down,
-                        },
-                    });
-                }
-                Tile::SplitterHorizontal => match beam.direction {
-                    Direction::Up | Direction::Down => {
-                        beams.push(Beam {
-                            position: pos,
-                            direction: Direction::Left,
-                        });
-                        beams.push(Beam {
-                            position: pos,
-                            direction: Direction::Right,
-                        });
-                    }
-                    Direction::Left | Direction::Right => {
-                        beams.push(Beam {
-                            position: pos,
-                            direction: beam.direction,
-                        });
-                    }
-                },
-                Tile::SplitterVertical => match beam.direction {
-                    Direction::Left | Direction::Right => {
-                        beams.push(Beam {
-                            position: pos,
-                            direction: Direction::Up,
-                        });
-                        beams.push(Beam {
-                            position: pos,
-                            direction: Direction::Down,
-                        });
-                    }
-                    Direction::Up | Direction::Down => {
-                        beams.push(Beam {
-                            position: pos,
-                            direction: beam.direction,
-                        });
-                    }
-                },
-                _ => {}
-            },
-            None => {}
+
+        if let Some(next_beams) = beam.next_beams(grid) {
+            beams.extend(next_beams);
         }
     }
+
+    visited_beams
+}
+
+fn part1(input: &str) -> u32 {
+    let grid = Grid::from(input);
+
+    // println!("{}", grid);
+
+    let beam = Beam {
+        position: (0, 0),
+        direction: Direction::Right,
+    };
+
+    let visited_beams = energized_positions(&grid, &beam);
 
     //unique positions
     let unique = visited_beams
@@ -195,17 +234,55 @@ fn part1(input: &str) -> u32 {
         .len() as u32;
 
     //display grid with visited_beams
-    let output_grid = vec![vec![Tile::Empty; grid.grid[0].len()]; grid.grid.len()];
-    let mut grid = Grid { grid: output_grid };
-    for beam in visited_beams {
-        grid.grid[beam.position.1][beam.position.0] = Tile::Energized;
-    }
-    println!("{}", grid);
+    // let output_grid = vec![vec![Tile::Empty; grid.grid[0].len()]; grid.grid.len()];
+    // let mut grid = Grid { grid: output_grid };
+    // for beam in visited_beams {
+    //     grid.grid[beam.position.1][beam.position.0] = Tile::Energized;
+    // }
+    // println!("{}", grid);
     unique
 }
 
 fn part2(input: &str) -> u32 {
-    0
+    let grid = Grid::from(input);
+
+    let mut starting_beams = Vec::new();
+
+    for y in 0..grid.grid.len() {
+        starting_beams.push(Beam {
+            position: (0, y),
+            direction: Direction::Right,
+        });
+        starting_beams.push(Beam {
+            position: (grid.grid[0].len() - 1, y),
+            direction: Direction::Left,
+        });
+    }
+
+    for x in 0..grid.grid[0].len() {
+        starting_beams.push(Beam {
+            position: (x, 0),
+            direction: Direction::Down,
+        });
+        starting_beams.push(Beam {
+            position: (x, grid.grid.len() - 1),
+            direction: Direction::Up,
+        });
+    }
+
+    let mut visited_beams = HashMap::new();
+
+    for beam in starting_beams {
+        visited_beams.insert(beam.clone(), energized_positions(&grid, &beam));
+    }
+    //unique positions
+    let max_unique = visited_beams
+        .iter()
+        .map(|(_, v)| v.iter().map(|b| b.position).collect::<HashSet<_>>())
+        .map(|s| s.len())
+        .max();
+
+    max_unique.unwrap() as u32
 }
 
 fn main() {
@@ -228,6 +305,6 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 51);
     }
 }
