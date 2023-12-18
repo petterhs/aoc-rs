@@ -49,7 +49,16 @@ enum Direction {
     Right,
 }
 
-fn next_directions(direction: Direction, steps_in_direction: u32) -> Vec<Direction> {
+fn next_directions(
+    direction: Direction,
+    steps_in_direction: u32,
+    steps_min: u32,
+    steps_max: u32,
+) -> Vec<Direction> {
+    if steps_in_direction < steps_min {
+        return vec![direction];
+    }
+
     let mut directions = match direction {
         Direction::Up => vec![Direction::Left, Direction::Right],
         Direction::Down => vec![Direction::Left, Direction::Right],
@@ -57,7 +66,7 @@ fn next_directions(direction: Direction, steps_in_direction: u32) -> Vec<Directi
         Direction::Right => vec![Direction::Up, Direction::Down],
     };
 
-    if steps_in_direction < 3 {
+    if steps_in_direction < steps_max {
         directions.push(direction);
     }
 
@@ -67,7 +76,7 @@ fn next_directions(direction: Direction, steps_in_direction: u32) -> Vec<Directi
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct State {
     pos: (usize, usize),
-    steps: usize,
+    cost: usize,
     prev_direction: Direction,
     steps_in_direction: u32,
 }
@@ -75,13 +84,13 @@ struct State {
 impl State {
     fn new(
         pos: (usize, usize),
-        steps: usize,
+        cost: usize,
         prev_direction: Direction,
         steps_in_direction: u32,
     ) -> Self {
         Self {
             pos,
-            steps,
+            cost,
             prev_direction,
             steps_in_direction,
         }
@@ -91,8 +100,8 @@ impl State {
 impl Ord for State {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other
-            .steps
-            .cmp(&self.steps)
+            .cost
+            .cmp(&self.cost)
             .then_with(|| self.pos.cmp(&other.pos))
     }
 }
@@ -103,62 +112,41 @@ impl PartialOrd for State {
     }
 }
 
-//TODO: Very slow, needs to be optimized
-fn part1(input: &str) -> usize {
-    let grid = Grid::from_str(input).unwrap();
-
-    let start = State::new((0, 0), 0, Direction::Down, 0);
+fn djikstra(grid: Grid, step_min: u32, step_max: u32) -> usize {
+    let start = State::new((0, 0), 0, Direction::Right, 0);
     let end = (grid.0.len() - 1, grid.0[0].len() - 1);
-
-    //Find a path to use as a maximum to prune the search space
-    let mut max = 0;
-    let mut pos = (0, 0);
-    for i in 0..grid.0.len() + grid.0[0].len() {
-        if i % 2 == 0 {
-            pos.1 += 1;
-        } else {
-            pos.0 += 1;
-        }
-        max += grid.0[pos.1][pos.0];
-
-        if pos == end {
-            break;
-        }
-    }
-    println!("Max: {}", max);
 
     let mut heap = BinaryHeap::new();
     heap.push(start);
 
     let mut dist = HashMap::new();
-    dist.insert(start, 0);
+    dist.insert(
+        (start.pos, start.prev_direction, start.steps_in_direction),
+        0,
+    );
 
     while let Some(state) = heap.pop() {
         let State {
             pos,
-            steps,
+            cost,
             prev_direction,
             steps_in_direction,
         } = state;
         if pos == end {
-            return steps;
+            return cost;
         }
 
-        if let Some(d) = dist.get(&state) {
-            if steps > *d && steps > max {
+        if let Some(d) = dist.get(&(state.pos, state.prev_direction, state.steps_in_direction)) {
+            if cost > *d {
                 continue;
             }
         }
 
-        if steps % 10 == 0 {
-            println!("{}: {:?}", steps, state);
-        }
-
-        let directions = next_directions(prev_direction, steps_in_direction);
+        let directions = next_directions(prev_direction, steps_in_direction, step_min, step_max);
 
         for next_direction in directions {
             if let Some(next_pos) = grid.next_position(pos, &next_direction) {
-                let next_steps = steps + grid.0[next_pos.1][next_pos.0];
+                let next_cost = cost + grid.0[next_pos.1][next_pos.0];
 
                 let steps_in_direction = if prev_direction == next_direction {
                     steps_in_direction + 1
@@ -166,20 +154,20 @@ fn part1(input: &str) -> usize {
                     1
                 };
 
-                let next_state =
-                    State::new(next_pos, next_steps, next_direction, steps_in_direction);
-
-                if next_steps < dist.get(&next_state).cloned().unwrap_or(usize::MAX)
-                    && next_steps <= max
+                if next_cost
+                    < dist
+                        .get(&(next_pos, next_direction, steps_in_direction))
+                        .cloned()
+                        .unwrap_or(usize::MAX)
                 {
                     heap.push(State::new(
                         next_pos,
-                        next_steps,
+                        next_cost,
                         next_direction,
                         steps_in_direction,
                     ));
 
-                    dist.insert(next_state, next_steps);
+                    dist.insert((next_pos, next_direction, steps_in_direction), next_cost);
                 }
             }
         }
@@ -187,10 +175,17 @@ fn part1(input: &str) -> usize {
     0
 }
 
-fn part2(input: &str) -> u32 {
-    0
+fn part1(input: &str) -> usize {
+    let grid = Grid::from_str(input).unwrap();
+
+    djikstra(grid, 1, 3)
 }
 
+fn part2(input: &str) -> usize {
+    let grid = Grid::from_str(input).unwrap();
+
+    djikstra(grid, 4, 10)
+}
 fn main() {
     println!("AoC 2023 - Day 1");
     let input = include_str!("input");
@@ -211,6 +206,6 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 94);
     }
 }
