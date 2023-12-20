@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 enum Field {
@@ -159,9 +160,7 @@ impl FromStr for PartRating {
 }
 
 fn solve(rating: &PartRating, rule: &Rule, rules: &HashMap<String, Rule>) -> RuleResult {
-    println!("Solving {:?} : rule: {}", rating, rule.name);
     for expression in rule.expressions.iter() {
-        println!("   {:?}", expression);
         let field = match expression.field {
             0 => rating.0,
             1 => rating.1,
@@ -171,7 +170,6 @@ fn solve(rating: &PartRating, rule: &Rule, rules: &HashMap<String, Rule>) -> Rul
         };
 
         let result = expression.result.clone();
-        println!("   {:?} : {:?}", field, result);
 
         if expression.condition.is_none() {
             if let RuleResult::Name(name) = &expression.result {
@@ -197,9 +195,7 @@ fn solve(rating: &PartRating, rule: &Rule, rules: &HashMap<String, Rule>) -> Rul
                     }
                     _ => return result,
                 },
-                _ => {
-                    println!(" failed  {:?} : {:?}", field, result);
-                }
+                _ => {}
             }
         }
     }
@@ -218,7 +214,6 @@ fn part1(input: &str) -> u32 {
             (line.name.clone(), line)
         })
         .collect::<HashMap<_, _>>();
-
     let ratings = input
         .next()
         .expect("No ratings")
@@ -236,8 +231,131 @@ fn part1(input: &str) -> u32 {
     acc
 }
 
-fn part2(input: &str) -> u32 {
-    0
+#[derive(Debug, Clone, Copy)]
+struct Range {
+    min: u64,
+    max: u64,
+}
+
+impl Range {
+    fn len(&self) -> u64 {
+        if self.min > self.max {
+            panic!("Invalid range");
+        }
+        self.max - self.min + 1
+    }
+    fn is_valid(&self) -> bool {
+        self.min <= self.max
+    }
+
+    fn decrease_max(&mut self, num: u64) {
+        if self.max < num {
+            panic!("Invalid range");
+        }
+        self.max = num;
+    }
+
+    fn increase_min(&mut self, num: u64) {
+        if self.min > num {
+            panic!("Invalid range");
+        }
+        self.min = num;
+    }
+}
+
+impl Display for Range {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {}]", self.min, self.max)
+    }
+}
+
+fn combinations(rule: &Rule, rules: &HashMap<String, Rule>, ranges: Vec<Range>) -> u64 {
+    let mut sum = 0;
+    let mut ranges = ranges;
+    'outer: for expression in rule.expressions.iter() {
+        let mut next_ranges = ranges.clone();
+        let range = next_ranges[expression.field];
+
+        for range in ranges.iter() {
+            if !range.is_valid() {
+                println!("invalid");
+                break 'outer;
+            }
+        }
+
+        match &expression.condition {
+            Some(Condition::LessThan(num)) if range.min >= *num as u64 => {
+                ranges[expression.field].increase_min(*num as u64);
+            }
+            Some(Condition::GreaterThan(num)) if range.max <= *num as u64 => {
+                ranges[expression.field].decrease_max(*num as u64);
+            }
+            Some(Condition::LessThan(num)) if range.max >= *num as u64 => {
+                next_ranges[expression.field].decrease_max(*num as u64 - 1);
+                ranges[expression.field].increase_min(*num as u64);
+                match &expression.result {
+                    RuleResult::Name(name) => {
+                        let rule = rules.get(name).unwrap();
+                        sum += combinations(rule, rules, next_ranges.clone());
+                    }
+                    RuleResult::Accepted => {
+                        sum += next_ranges.iter().fold(1, |acc, range| acc * range.len());
+                    }
+                    RuleResult::Rejected => {}
+                }
+            }
+            Some(Condition::GreaterThan(num)) if range.min <= *num as u64 => {
+                next_ranges[expression.field].increase_min(*num as u64 + 1);
+                ranges[expression.field].decrease_max(*num as u64);
+                match &expression.result {
+                    RuleResult::Name(name) => {
+                        let rule = rules.get(name).unwrap();
+                        sum += combinations(rule, rules, next_ranges.clone());
+                    }
+                    RuleResult::Accepted => {
+                        sum += next_ranges.iter().fold(1, |acc, range| acc * range.len());
+                    }
+                    RuleResult::Rejected => {}
+                }
+            }
+            None => match &expression.result {
+                RuleResult::Name(name) => {
+                    let rule = rules.get(name).unwrap();
+                    sum += combinations(rule, rules, next_ranges.clone());
+                }
+                RuleResult::Accepted => {
+                    sum += ranges.iter().fold(1, |acc, range| acc * range.len());
+                }
+                RuleResult::Rejected => {}
+            },
+            _ => {}
+        }
+    }
+
+    sum
+}
+
+fn part2(input: &str) -> u64 {
+    let mut input = input.split("\n\n");
+
+    let rules = input
+        .next()
+        .expect("No rules")
+        .lines()
+        .map(|line| {
+            let line = line.parse::<Rule>().unwrap();
+            (line.name.clone(), line)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let ranges = vec![
+        Range { min: 1, max: 4000 },
+        Range { min: 1, max: 4000 },
+        Range { min: 1, max: 4000 },
+        Range { min: 1, max: 4000 },
+    ];
+
+    combinations(&rules.get("in").unwrap(), &rules, ranges)
 }
 
 fn main() {
@@ -260,6 +378,69 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 167409079868000);
+    }
+
+    #[test]
+    fn combinations_test() {
+        let input = include_str!("test");
+        let mut input = input.split("\n\n");
+
+        let rules = input
+            .next()
+            .expect("No rules")
+            .lines()
+            .map(|line| {
+                let line = line.parse::<Rule>().unwrap();
+                (line.name.clone(), line)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let ranges = vec![
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+        ];
+
+        let rule = rules.get("qkq").unwrap();
+        let sum = combinations(rule, &rules, ranges);
+
+        let expected_qkq = (1415 - 1 + 1) * 4000 * 4000 * 4000;
+        println!("qkq_accept: {}", expected_qkq);
+        let expected_crn = (4000 - 2663 + 1) * 4000 * 4000 * 4000;
+        println!("crn: {}", expected_crn);
+        println!("expected_sum: {}", expected_qkq + expected_crn);
+        assert_eq!(sum, expected_qkq + expected_crn);
+    }
+
+    #[test]
+    fn combinations_test_2() {
+        let input = include_str!("test");
+        let mut input = input.split("\n\n");
+
+        let rules = input
+            .next()
+            .expect("No rules")
+            .lines()
+            .map(|line| {
+                let line = line.parse::<Rule>().unwrap();
+                (line.name.clone(), line)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let ranges = vec![
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+            Range { min: 1, max: 4000 },
+        ];
+
+        let rule = rules.get("pv").unwrap();
+        let sum = combinations(rule, &rules, ranges);
+
+        let expected_pv = (1716) * 4000 * 4000 * 4000;
+        println!("expectd_crn: {}", expected_pv);
+        assert_eq!(sum, expected_pv);
     }
 }
