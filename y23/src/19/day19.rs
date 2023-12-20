@@ -169,36 +169,20 @@ fn solve(rating: &PartRating, rule: &Rule, rules: &HashMap<String, Rule>) -> Rul
             _ => panic!("Invalid field"),
         };
 
-        let result = expression.result.clone();
-
-        if expression.condition.is_none() {
+        if match &expression.condition {
+            None => true,
+            Some(Condition::LessThan(num)) if field < *num => true,
+            Some(Condition::GreaterThan(num)) if field > *num => true,
+            _ => false,
+        } {
             if let RuleResult::Name(name) = &expression.result {
                 let rule = rules.get(name).unwrap();
                 return solve(rating, rule, rules);
             }
-            return result;
-        }
-
-        if let Some(condition) = &expression.condition {
-            match condition {
-                Condition::LessThan(num) if field < *num => match &expression.result {
-                    RuleResult::Name(name) => {
-                        let rule = rules.get(name).unwrap();
-                        return solve(rating, rule, rules);
-                    }
-                    _ => return result,
-                },
-                Condition::GreaterThan(num) if field > *num => match &expression.result {
-                    RuleResult::Name(name) => {
-                        let rule = rules.get(name).unwrap();
-                        return solve(rating, rule, rules);
-                    }
-                    _ => return result,
-                },
-                _ => {}
-            }
+            return expression.result.clone();
         }
     }
+
     RuleResult::Rejected
 }
 
@@ -271,64 +255,50 @@ impl Display for Range {
 
 fn combinations(rule: &Rule, rules: &HashMap<String, Rule>, ranges: Vec<Range>) -> u64 {
     let mut sum = 0;
-    let mut ranges = ranges;
-    'outer: for expression in rule.expressions.iter() {
-        let mut next_ranges = ranges.clone();
-        let range = next_ranges[expression.field];
+    let mut next_expression_ranges = ranges;
+    for expression in rule.expressions.iter() {
+        let mut next_rule_ranges = next_expression_ranges.clone();
+        let range = next_rule_ranges[expression.field];
 
-        for range in ranges.iter() {
-            if !range.is_valid() {
-                println!("invalid");
-                break 'outer;
-            }
+        if next_expression_ranges.iter().any(|range| !range.is_valid()) {
+            println!("Invalid range");
+            break;
         }
 
+        //Modify the ranges
         match &expression.condition {
             Some(Condition::LessThan(num)) if range.min >= *num as u64 => {
-                ranges[expression.field].increase_min(*num as u64);
+                //Increase the min of the range for the next expression
+                next_expression_ranges[expression.field].increase_min(*num as u64);
+                continue; //Skip this expression
             }
             Some(Condition::GreaterThan(num)) if range.max <= *num as u64 => {
-                ranges[expression.field].decrease_max(*num as u64);
+                //Decrease the max of the range for the next expression
+                next_expression_ranges[expression.field].decrease_max(*num as u64);
+                continue; //Skip this expression
             }
             Some(Condition::LessThan(num)) if range.max >= *num as u64 => {
-                next_ranges[expression.field].decrease_max(*num as u64 - 1);
-                ranges[expression.field].increase_min(*num as u64);
-                match &expression.result {
-                    RuleResult::Name(name) => {
-                        let rule = rules.get(name).unwrap();
-                        sum += combinations(rule, rules, next_ranges.clone());
-                    }
-                    RuleResult::Accepted => {
-                        sum += next_ranges.iter().fold(1, |acc, range| acc * range.len());
-                    }
-                    RuleResult::Rejected => {}
-                }
+                next_rule_ranges[expression.field].decrease_max(*num as u64 - 1);
+                next_expression_ranges[expression.field].increase_min(*num as u64);
             }
             Some(Condition::GreaterThan(num)) if range.min <= *num as u64 => {
-                next_ranges[expression.field].increase_min(*num as u64 + 1);
-                ranges[expression.field].decrease_max(*num as u64);
-                match &expression.result {
-                    RuleResult::Name(name) => {
-                        let rule = rules.get(name).unwrap();
-                        sum += combinations(rule, rules, next_ranges.clone());
-                    }
-                    RuleResult::Accepted => {
-                        sum += next_ranges.iter().fold(1, |acc, range| acc * range.len());
-                    }
-                    RuleResult::Rejected => {}
-                }
+                next_rule_ranges[expression.field].increase_min(*num as u64 + 1);
+                next_expression_ranges[expression.field].decrease_max(*num as u64);
             }
-            None => match &expression.result {
-                RuleResult::Name(name) => {
-                    let rule = rules.get(name).unwrap();
-                    sum += combinations(rule, rules, next_ranges.clone());
-                }
-                RuleResult::Accepted => {
-                    sum += ranges.iter().fold(1, |acc, range| acc * range.len());
-                }
-                RuleResult::Rejected => {}
-            },
-            _ => {}
+            None => {} //Use same range for next expression
+            _ => continue,
+        }
+        match &expression.result {
+            RuleResult::Name(name) => {
+                let rule = rules.get(name).unwrap();
+                sum += combinations(rule, rules, next_rule_ranges.clone());
+            }
+            RuleResult::Accepted => {
+                sum += next_rule_ranges
+                    .iter()
+                    .fold(1, |acc, range| acc * range.len());
+            }
+            RuleResult::Rejected => {}
         }
     }
 
