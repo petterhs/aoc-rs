@@ -32,10 +32,7 @@ fn validate_instruction(rules: Vec<Rule>, mut instruction: VecDeque<u32>) -> boo
 
     if rules.iter().filter(|rule| rule.y == first).any(|rule| {
         //Assert that rule.x does not exist in the rest of the instruction
-        if instruction.iter().any(|i| i == &rule.x) {
-            return true;
-        }
-        return false;
+        instruction.iter().any(|i| i == &rule.x)
     }) {
         return false;
     }
@@ -56,8 +53,6 @@ fn part1(input: &str) -> u32 {
             .collect::<VecDeque<u32>>()
     });
 
-    println!("{:?}", rules);
-    println!("Pages to produce: {:?}", instructions);
     instructions
         .into_iter()
         .filter(|i| validate_instruction(rules.clone(), i.clone()))
@@ -69,7 +64,46 @@ fn part1(input: &str) -> u32 {
 }
 
 fn part2(input: &str) -> u32 {
-    0
+    let input = input.split("\n\n").collect::<Vec<&str>>();
+    let rules = input[0]
+        .lines()
+        .map(|l| l.parse::<Rule>().unwrap())
+        .collect::<Vec<Rule>>();
+    let instructions = input[1].lines().map(|l| {
+        l.split(',')
+            .collect::<Vec<&str>>()
+            .into_iter()
+            .map(|n| n.parse::<u32>().unwrap())
+            .collect::<VecDeque<u32>>()
+    });
+
+    instructions
+        .into_iter()
+        .filter(|i| !validate_instruction(rules.clone(), i.clone()))
+        .map(|i| {
+            let mut i = i.into_iter().collect::<Vec<u32>>();
+            i.sort_by(|a, b| {
+                let rule = rules
+                    .iter()
+                    .filter(|rule| (rule.y == *a && rule.x == *b) || (rule.y == *b && rule.x == *a))
+                    .next();
+
+                match rule {
+                    Some(rule) => {
+                        if rule.y == *a {
+                            return std::cmp::Ordering::Less;
+                        } else {
+                            return std::cmp::Ordering::Greater;
+                        }
+                    }
+                    None => return std::cmp::Ordering::Equal,
+                }
+            });
+
+            let middle = i.len() / 2;
+            *i.get(middle).unwrap() as u32
+        })
+        .sum::<u32>() as u32
 }
 
 fn main() {
@@ -92,6 +126,6 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 123);
     }
 }
