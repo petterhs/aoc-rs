@@ -34,7 +34,7 @@ impl FromStr for Tile {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Guard {
     position: (usize, usize),
     direction: Direction,
@@ -48,19 +48,28 @@ impl Guard {
         }
     }
 
-    fn step(&self) -> Self {
+    fn step(&self) -> Option<Self> {
         let (x, y) = self.position;
         let direction = self.direction;
+
+        if direction == Direction::Up && y == 0 {
+            return None;
+        }
+
+        if direction == Direction::Down && y == usize::MAX {
+            return None;
+        }
+
         let (x, y) = match direction {
             Direction::Up => (x, y - 1),
             Direction::Down => (x, y + 1),
             Direction::Left => (x - 1, y),
             Direction::Right => (x + 1, y),
         };
-        Guard {
+        Some(Guard {
             position: (x, y),
             direction,
-        }
+        })
     }
 
     fn turn_right(&self) -> Self {
@@ -77,10 +86,11 @@ impl Guard {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Map {
     tiles: Vec<Vec<Tile>>,
     visited: HashSet<(usize, usize)>,
+    path: HashSet<Guard>,
     guard: Option<Guard>,
 }
 
@@ -97,10 +107,7 @@ impl FromStr for Map {
                     .map(|(x, c)| {
                         let tile = c.to_string().parse().unwrap();
                         if let Tile::Guard(dir) = tile {
-                            guard = Some(Guard {
-                                position: (x, y),
-                                direction: dir,
-                            });
+                            guard = Some(Guard::new(x, y, dir));
                         }
                         tile
                     })
@@ -108,9 +115,11 @@ impl FromStr for Map {
             })
             .collect();
         let visited = HashSet::new();
+        let path = HashSet::new();
         Ok(Map {
             tiles,
             visited,
+            path,
             guard,
         })
     }
@@ -150,6 +159,7 @@ impl Map {
         let direction = guard.direction;
 
         self.visited.insert(guard.position.clone());
+        self.path.insert(guard.clone());
         match direction {
             Direction::Up => {
                 if y == 0 {
@@ -163,7 +173,7 @@ impl Map {
                 } else {
                     self.tiles[y - 1][x] = Tile::Guard(Direction::Up);
                     self.tiles[y][x] = Tile::Empty;
-                    self.guard = Some(guard.step());
+                    self.guard = guard.step();
                 }
             }
             Direction::Down => {
@@ -178,7 +188,7 @@ impl Map {
                 } else {
                     self.tiles[y + 1][x] = Tile::Guard(Direction::Down);
                     self.tiles[y][x] = Tile::Empty;
-                    self.guard = Some(guard.step());
+                    self.guard = guard.step();
                 }
             }
             Direction::Left => {
@@ -194,7 +204,7 @@ impl Map {
                 } else {
                     self.tiles[y][x - 1] = Tile::Guard(Direction::Left);
                     self.tiles[y][x] = Tile::Empty;
-                    self.guard = Some(guard.step());
+                    self.guard = guard.step();
                 }
             }
             Direction::Right => {
@@ -209,7 +219,7 @@ impl Map {
                 } else {
                     self.tiles[y][x + 1] = Tile::Guard(Direction::Right);
                     self.tiles[y][x] = Tile::Empty;
-                    self.guard = Some(guard.step());
+                    self.guard = guard.step();
                 }
             }
         };
@@ -219,7 +229,6 @@ impl Map {
 
 fn part1(input: &str) -> u32 {
     let mut map = input.parse::<Map>().unwrap();
-    println!("{}", map);
 
     while map.tick() {}
 
@@ -227,7 +236,57 @@ fn part1(input: &str) -> u32 {
 }
 
 fn part2(input: &str) -> u32 {
-    0
+    let mut map = input.parse::<Map>().unwrap();
+
+    let y_max = map.tiles.len();
+    let x_max = map.tiles[0].len();
+
+    let start_guard = map.guard.unwrap().position;
+
+    let mut candidates = HashSet::new();
+
+    while map.tick() {
+        let mut new_map = map.clone();
+
+        let guard_position = new_map.guard.clone().unwrap();
+
+        let new_obsticle_pos = guard_position.step();
+
+        if new_obsticle_pos.is_none() {
+            break;
+        }
+
+        let new_obsticle_pos = new_obsticle_pos.unwrap().position;
+
+        if new_obsticle_pos.0 >= x_max || new_obsticle_pos.1 >= y_max {
+            break;
+        }
+        if map.tiles[new_obsticle_pos.1][new_obsticle_pos.0] == Tile::Obstacle {
+            continue;
+        }
+        if new_obsticle_pos == start_guard {
+            continue;
+        }
+        if map.visited.contains(&new_obsticle_pos) {
+            continue;
+        }
+
+        //Try to place obstacle in front of guard and turn the guard Right
+        //Check if the guard then reaches a path (both position and direction) it has already been on.
+        //If so the guard is in a loop.
+        new_map.tiles[new_obsticle_pos.1][new_obsticle_pos.0] = Tile::Obstacle;
+        let guard = new_map.guard.unwrap().turn_right();
+        new_map.guard = Some(guard);
+
+        while new_map.tick() {
+            if new_map.path.contains(&new_map.guard.clone().unwrap()) {
+                candidates.insert(new_obsticle_pos);
+                break;
+            }
+        }
+    }
+
+    candidates.len() as u32
 }
 
 fn main() {
@@ -250,6 +309,6 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 6);
     }
 }
