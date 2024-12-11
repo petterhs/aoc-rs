@@ -4,19 +4,32 @@ use std::{fmt::Display, str::FromStr};
 #[derive(Debug, Clone)]
 struct FileBlock {
     id: usize,
+    size: u32,
 }
 
 #[derive(Debug, Clone)]
 enum Block {
     File(FileBlock),
-    Free,
+    Free(u32),
 }
 
 impl Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Block::File(FileBlock { id }) => write!(f, "{:?}", id),
-            Block::Free => write!(f, "."),
+            Block::File(FileBlock { id, size }) => {
+                let mut string = String::new();
+                for _ in 0..*size {
+                    string.push_str(&id.to_string());
+                }
+                write!(f, "{}", string)
+            }
+            Block::Free(size) => {
+                let mut string = String::new();
+                for _ in 0..*size {
+                    string.push_str(".");
+                }
+                write!(f, "{}", string)
+            }
         }
     }
 }
@@ -27,26 +40,75 @@ struct Filesystem {
 
 impl Filesystem {
     fn checksum(&self) -> u64 {
-        self.blocks
-            .iter()
-            .enumerate()
-            .fold(0, |acc, (i, b)| match b {
-                Block::File(FileBlock { id }) => acc + (i * id) as u64,
-                Block::Free => acc,
-            })
+        let mut checksum = 0;
+
+        let mut idx: u64 = 0;
+
+        for block in self.blocks.iter() {
+            match block {
+                Block::File(FileBlock { id, size }) => {
+                    for _ in 0..*size {
+                        checksum += (idx * *id as u64) as u64;
+                        idx += 1;
+                    }
+                }
+                Block::Free(size) => idx += *size as u64,
+            }
+        }
+        checksum
     }
 
     fn optimize(&mut self) {
         let mut last_free_index = 0;
         for idx in (0..self.blocks.len()).rev() {
-            if let Block::File(FileBlock { id }) = self.blocks[idx] {
+            if let Block::File(FileBlock { id, size }) = self.blocks[idx] {
                 let mut i = last_free_index;
-                while i < idx {
-                    if let Block::Free = self.blocks[i] {
-                        self.blocks[i] = Block::File(FileBlock { id });
-                        self.blocks[idx] = Block::Free;
+                let mut file_size = size;
+
+                while file_size > 0 && i < idx {
+                    if let Block::Free(free_size) = self.blocks[i] {
+                        if free_size < file_size {
+                            self.blocks[i] = Block::File(FileBlock {
+                                id,
+                                size: free_size,
+                            });
+                            self.blocks[idx] = Block::File(FileBlock {
+                                id,
+                                size: file_size - free_size,
+                            });
+                            file_size -= free_size;
+                        } else {
+                            self.blocks[i] = Block::File(FileBlock {
+                                id,
+                                size: file_size,
+                            });
+                            self.blocks[idx] = Block::Free(file_size);
+                            self.blocks
+                                .insert(i + 1, Block::Free(free_size - file_size));
+
+                            break;
+                        }
                         last_free_index = i;
-                        break;
+                    }
+                    i += 1;
+                }
+            }
+        }
+    }
+
+    fn optimize2(&mut self) {
+        for idx in (0..self.blocks.len()).rev() {
+            if let Block::File(FileBlock { id, size }) = self.blocks[idx] {
+                let mut i = 0;
+                while i < idx {
+                    if let Block::Free(free_size) = self.blocks[i] {
+                        if free_size >= size {
+                            self.blocks[i] = Block::File(FileBlock { id, size });
+
+                            self.blocks[idx] = Block::Free(size);
+                            self.blocks.insert(i + 1, Block::Free(free_size - size));
+                            break;
+                        }
                     }
                     i += 1;
                 }
@@ -72,16 +134,14 @@ impl FromStr for Filesystem {
             if block[0] == 0 {
                 panic!("parse error");
             }
-
-            for _ in 0..block[0] {
-                blocks.push(Block::File(FileBlock { id: i }));
-            }
+            blocks.push(Block::File(FileBlock {
+                id: i,
+                size: block[0],
+            }));
             if block.len() == 1 {
                 break;
             }
-            for _ in 0..block[1] {
-                blocks.push(Block::Free);
-            }
+            blocks.push(Block::Free(block[1]));
         }
         Ok(Filesystem { blocks })
     }
@@ -99,15 +159,17 @@ impl Display for Filesystem {
 fn part1(input: &str) -> u64 {
     let mut filesystem = input.parse::<Filesystem>().expect("parse error");
 
-    println!("1");
     filesystem.optimize();
 
-    println!("2");
     filesystem.checksum() as u64
 }
 
-fn part2(input: &str) -> u32 {
-    0
+fn part2(input: &str) -> u64 {
+    let mut filesystem = input.parse::<Filesystem>().expect("parse error");
+
+    filesystem.optimize2();
+
+    filesystem.checksum() as u64
 }
 
 fn main() {
@@ -135,6 +197,6 @@ mod tests {
     #[test]
     fn part2_test() {
         let input = include_str!("test");
-        assert_eq!(part2(input), 0);
+        assert_eq!(part2(input), 2858);
     }
 }
